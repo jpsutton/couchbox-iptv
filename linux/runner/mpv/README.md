@@ -19,3 +19,8 @@ Local changes, kept small so updates from Plezy apply cleanly:
   audio-only one, which couchbox-iptv does not register).
 
 To update: copy the same files from a newer Plezy tag and reapply the rename.
+
+Not from Plezy: `my_application.cc` clears the transparent window before each
+frame (`clear_window_cb`). Without it, overlays that fade out over the video
+leave a faint copy behind, because Flutter's GTK compositor draws each frame
+over the previous one. Plezy 2.22.0 has the same gap.

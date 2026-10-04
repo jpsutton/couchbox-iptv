@@ -9,6 +9,21 @@
 #include "flutter/generated_plugin_registrant.h"
 #include "mpv/mpv_plugin.h"
 
+// Clears the window to transparent before each frame. Flutter's GTK
+// compositor blends its frame over what is already there
+// (gdk_cairo_draw_from_gl), and an app-paintable window is never cleared by
+// GTK, so where a frame turns transparent (a faded overlay) the old pixels
+// would stay on screen. Runs before the window's children draw.
+static gboolean clear_window_cb(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
+  (void)widget;
+  (void)user_data;
+  cairo_save(cr);
+  cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+  cairo_paint(cr);
+  cairo_restore(cr);
+  return FALSE;
+}
+
 // The native mpv video plane is a wl_subsurface stacked below this window's
 // surface, so the window needs an alpha channel and a transparent Flutter
 // background for the video to show through (from Plezy's runner).
@@ -26,6 +41,7 @@ static void enable_video_plane_transparency(GtkWindow* window, FlView* view) {
 
   gtk_widget_set_visual(GTK_WIDGET(window), visual);
   gtk_widget_set_app_paintable(GTK_WIDGET(window), TRUE);
+  g_signal_connect(window, "draw", G_CALLBACK(clear_window_cb), nullptr);
 
   GdkRGBA transparent = {0.0, 0.0, 0.0, 0.0};
   fl_view_set_background_color(view, &transparent);
