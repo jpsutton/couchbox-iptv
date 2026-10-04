@@ -1,0 +1,15 @@
+[Unit]
+Description=couchbox-iptv: refresh channels, streams and guide
+Documentation=https://github.com/jpsutton/couchbox-iptv
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/couchbox-iptv-refresh
+# Never compete with what is on screen: CPU and disk only when idle. The job
+# also limits its own network use while something plays.
+Nice=19
+CPUSchedulingPolicy=idle
+IOSchedulingClass=idle
+CPUWeight=idle
+IOWeight=1
+TimeoutStartSec=2h

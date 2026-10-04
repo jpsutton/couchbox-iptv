@@ -50,8 +50,9 @@ never disturb what is on screen.
   IOWeight=1
   ```
 
-  `IOWeight` needs the io controller delegated to the user manager; check on
-  the box, `IOSchedulingClass=idle` covers it otherwise.
+  On the M715q the user manager gets only the cpu, memory and pids
+  controllers, so `IOWeight` does nothing there; `IOSchedulingClass=idle`
+  still applies (checked 2026-10-04).
 - **Network**, which no scheduler setting covers: few checks at a time, and
   only a playlist plus one short segment per stream. While a video plays (in
   this app or any other: an MPRIS player playing, or a PipeWire stream), the
@@ -93,14 +94,18 @@ never disturb what is on screen.
 | B. iptv-org/epg's grabber, run nightly for the kept channels | The supported route | Node.js on the box; slow; sites break |
 | C. A first, B later | Fast start | Two code paths |
 
-Proposed: C. Channels without data show "No information".
+A turned out to cover 2 channels (2026-10-04), so M1 uses i.mjh.nz's Pluto
+TV guide instead: iptv-org's Pluto streams go through i.mjh.nz's
+`jmp2.uk/plu-<id>` links, so the id matches directly. With US and English
+that is 353 of 1,190 channels. B (iptv-org/epg) for the rest comes in M5.
+Channels without data show "No information".
 
 ## Milestones
 
 | | Goal | Status |
 |---|---|---|
 | M0 | Player comparison on the M715q | Done: native plane (`m0.md`) |
-| M1 | Background job and database | Next |
+| M1 | Background job and database | Built; first full run on the M715q |
 | M2 | Player and channel list | |
 | M3 | Guide | |
 | M4 | Packaging, tile, timer, CI | |

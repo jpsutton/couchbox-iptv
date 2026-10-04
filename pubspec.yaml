@@ -14,11 +14,21 @@ dependencies:
   media_kit: ^1.2.6
   media_kit_video: ^2.0.1
   media_kit_libs_video: ^1.0.7
+  args: ^2.7.0
+  path: ^1.9.1
+  sqlite3: ^3.7.0
+  xml: ^7.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+
+# Use the system libsqlite3 (Arch's sqlite package) rather than a bundled copy.
+hooks:
+  user_defines:
+    sqlite3:
+      source: system
 
 flutter:
   uses-material-design: true
