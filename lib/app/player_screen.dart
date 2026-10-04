@@ -41,6 +41,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   late List<ChannelEntry> _channels = widget.channels;
   late int _index = widget.start;
   bool _banner = true;
+
+  /// Fade only when the banner times out; Info shows and hides it at once.
+  bool _fade = false;
   Timer? _bannerTimer;
   String _digits = '';
   Timer? _digitTimer;
@@ -57,7 +60,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _guide = widget.repository.programmes(now, now.add(const Duration(hours: 4)));
       _showBanner();
     } else {
-      _tune();
+      // After the first frame: tuning notifies listeners, which rebuild.
+      WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? _tune() : null);
     }
   }
 
@@ -92,8 +96,32 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Shows the banner; it hides 5 s after the picture appears.
   void _showBanner({bool hold = false}) {
     _bannerTimer?.cancel();
-    setState(() => _banner = true);
-    if (!hold) _bannerTimer = Timer(const Duration(seconds: 5), () => mounted ? setState(() => _banner = false) : null);
+    setState(() {
+      _banner = true;
+      _fade = false;
+    });
+    if (!hold) {
+      _bannerTimer = Timer(const Duration(seconds: 5), () {
+        if (!mounted) return;
+        setState(() {
+          _banner = false;
+          _fade = true;
+        });
+      });
+    }
+  }
+
+  /// Info: show the banner, or hide it if it is showing.
+  void _toggleBanner() {
+    if (_banner && widget.tuner.state.value.phase == PlayerPhase.playing) {
+      _bannerTimer?.cancel();
+      setState(() {
+        _banner = false;
+        _fade = false;
+      });
+    } else {
+      _showBanner();
+    }
   }
 
   void _digit(int d) {
@@ -129,7 +157,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _step(1);
       case RemoteKey.down || RemoteKey.channelDown:
         _step(-1);
-      case RemoteKey.ok || RemoteKey.info || RemoteKey.left || RemoteKey.right:
+      case RemoteKey.info:
+        _toggleBanner();
+      case RemoteKey.ok || RemoteKey.left || RemoteKey.right:
         _showBanner();
       case RemoteKey.back:
         _leave();
@@ -178,8 +208,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (state.phase != PlayerPhase.playing) const Positioned.fill(child: ColoredBox(color: Colors.black)),
           if (state.phase == PlayerPhase.opening || state.phase == PlayerPhase.failed)
             Center(child: _status(state, channel)),
-          if (_banner || state.phase != PlayerPhase.playing)
-            Positioned(left: 48, right: 48, bottom: 40, child: _bannerPanel(channel, now, next, state)),
+          Positioned(
+            left: 48,
+            right: 48,
+            bottom: 40,
+            child: IgnorePointer(
+              child: AnimatedOpacity(
+                opacity: _banner || state.phase != PlayerPhase.playing ? 1 : 0,
+                duration: _fade ? const Duration(milliseconds: 600) : Duration.zero,
+                child: _bannerPanel(channel, now, next, state),
+              ),
+            ),
+          ),
           if (_digits.isNotEmpty)
             Positioned(
               top: 40,

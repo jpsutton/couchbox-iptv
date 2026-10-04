@@ -33,7 +33,13 @@ RemoteKey remoteKey(KeyEvent event) {
     return RemoteKey.back;
   }
   if (key == LogicalKeyboardKey.contextMenu || key == LogicalKeyboardKey.keyM) return RemoteKey.menu;
-  if (key == LogicalKeyboardKey.info || key == LogicalKeyboardKey.keyI) return RemoteKey.info;
+  // The MCE remote's More/Info (evdev KEY_INFO) has no XKB keysym Flutter
+  // knows; its physical key is HID "Data On Screen" (PhysicalKeyboardKey.info).
+  if (key == LogicalKeyboardKey.info ||
+      event.physicalKey == PhysicalKeyboardKey.info ||
+      key == LogicalKeyboardKey.keyI) {
+    return RemoteKey.info;
+  }
   if (key == LogicalKeyboardKey.channelUp || key == LogicalKeyboardKey.pageUp) return RemoteKey.channelUp;
   if (key == LogicalKeyboardKey.channelDown || key == LogicalKeyboardKey.pageDown) return RemoteKey.channelDown;
   if (key == LogicalKeyboardKey.mediaStop) return RemoteKey.stop;
