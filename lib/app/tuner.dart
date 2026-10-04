@@ -31,6 +31,9 @@ class Tuner {
   final state = ValueNotifier(const TunerState());
   int _generation = 0;
 
+  /// Paused by the viewer (the cache keeps filling).
+  final paused = ValueNotifier(false);
+
   /// Applies the preferred audio and subtitle languages.
   Future<void> configure(Settings settings) async {
     await player.init();
@@ -44,6 +47,10 @@ class Tuner {
   /// next stream after a bad picture).
   Future<void> tune(ChannelEntry channel, {int from = 0}) async {
     final generation = ++_generation;
+    if (paused.value) {
+      paused.value = false;
+      await player.setOption('pause', 'no');
+    }
     repository.lastChannel = channel.id;
     final streams = channel.streams;
     for (var i = from; i < streams.length; i++) {
@@ -93,8 +100,38 @@ class Tuner {
     }
   }
 
+  Future<void> setPaused(bool value) async {
+    if (state.value.phase != PlayerPhase.playing) return;
+    paused.value = value;
+    await player.setOption('pause', value ? 'yes' : 'no');
+  }
+
+  /// How far playback is behind the live edge (the end of the cache), in
+  /// seconds; null when unknown.
+  Future<double?> behindLive() async {
+    final position = double.tryParse(await player.property('time-pos') ?? '');
+    final cached = double.tryParse(await player.property('demuxer-cache-time') ?? '');
+    if (position == null || cached == null) return null;
+    final behind = cached - position;
+    return behind < 0 ? 0 : behind;
+  }
+
+  /// Rewind ([seconds] < 0) within the cache, or fast forward towards live:
+  /// never past the live edge, less a few seconds so playback doesn't stall.
+  Future<void> seekBy(int seconds) async {
+    if (state.value.phase != PlayerPhase.playing) return;
+    var by = seconds.toDouble();
+    if (by > 0) {
+      final behind = await behindLive() ?? 0;
+      by = by.clamp(0, behind - 3 > 0 ? behind - 3 : 0);
+      if (by <= 0) return;
+    }
+    await player.command(['seek', by.toStringAsFixed(1), 'relative']);
+  }
+
   Future<void> stop() async {
     _generation++;
+    paused.value = false;
     await player.stop();
     state.value = const TunerState();
   }

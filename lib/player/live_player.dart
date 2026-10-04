@@ -28,8 +28,11 @@ abstract class LivePlayer {
 
   Future<void> stop();
 
-  /// Sets an mpv option, e.g. alang.
+  /// Sets an mpv option or property, e.g. alang, pause.
   Future<void> setOption(String name, String value);
+
+  /// Runs an mpv command, e.g. ['seek', '-10'].
+  Future<void> command(List<String> args);
 
   /// Changes as a stream opens, shows its first frame, or fails.
   Stream<PlayerStatus> get status;
@@ -44,14 +47,19 @@ abstract class LivePlayer {
   Future<void> dispose();
 }
 
-/// mpv options for live streams: hardware decoding, and a stream that stops
-/// answering fails quickly instead of hanging.
+/// mpv options for live streams: hardware decoding, a stream that stops
+/// answering fails quickly instead of hanging, and a cache that keeps
+/// recording while paused and can be seeked in (rewind, then fast forward
+/// back towards live): several minutes at typical bitrates.
 const Map<String, String> liveMpvOptions = {
   'hwdec': 'auto-safe',
   'network-timeout': '10',
   'demuxer-lavf-o': 'reconnect=1,reconnect_streamed=1,reconnect_delay_max=5',
   'cache': 'yes',
   'demuxer-readahead-secs': '10',
+  'demuxer-seekable-cache': 'yes',
+  'demuxer-max-bytes': '256MiB',
+  'demuxer-max-back-bytes': '128MiB',
 };
 
 /// mpv's http-header-fields value for [headers].

@@ -15,7 +15,8 @@ import 'widgets.dart';
 
 /// The home screen: a grid of channels by half hours, the focused programme's
 /// details on top and the focused channel playing in a preview box beside
-/// them. OK goes full screen, Menu has options, digits jump to a channel.
+/// them. OK or Play goes full screen, Menu has options, digits jump to a
+/// channel, Channel Up/Down (or Next/Previous) page through the channels.
 class GuideScreen extends StatefulWidget {
   const GuideScreen({super.key, required this.repository, required this.tuner, required this.settings});
 
@@ -181,6 +182,13 @@ class _GuideScreenState extends State<GuideScreen> {
     _schedulePreview();
   }
 
+  /// Rows on screen: Channel Up/Down move a whole page.
+  int get _pageRows {
+    if (!_rows.hasClients) return 6;
+    final rows = (_rows.position.viewportDimension / _rowHeight).floor();
+    return rows < 1 ? 1 : rows;
+  }
+
   void _scrollToRow() {
     if (!_rows.hasClients) return;
     final viewport = _rows.position.viewportDimension;
@@ -259,10 +267,12 @@ class _GuideScreenState extends State<GuideScreen> {
         }
       case RemoteKey.down:
         _moveRow(_row + 1);
-      case RemoteKey.channelUp:
-        _moveRow(_row - 6);
-      case RemoteKey.channelDown:
-        _moveRow(_row + 6);
+      case RemoteKey.channelUp || RemoteKey.previous:
+        _moveRow(_row - _pageRows);
+      case RemoteKey.channelDown || RemoteKey.next:
+        _moveRow(_row + _pageRows);
+      case RemoteKey.play || RemoteKey.playPause:
+        _play();
       case RemoteKey.left:
         _moveTime(-1);
       case RemoteKey.right:

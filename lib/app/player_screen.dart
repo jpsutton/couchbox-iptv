@@ -10,9 +10,12 @@ import 'repository.dart';
 import 'tuner.dart';
 import 'widgets.dart';
 
-/// Full-screen playback. Up/Down or Channel Up/Down change channel, digits
-/// tune by number, OK or Info shows what's on, Menu has options. Back returns
-/// to the guide with the channel still playing in its preview; Stop stops it.
+/// Full-screen playback. Up/Down, Channel Up/Down or Next/Previous change
+/// channel, digits tune by number, OK shows what's on and Info toggles it,
+/// Menu has options. Play/Pause pauses live TV (the cache keeps filling);
+/// Rewind and Fast Forward move within the cache, never past live. Back
+/// returns to the guide with the channel still playing in its preview; Stop
+/// stops it.
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
     super.key,
@@ -44,7 +47,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Fade only when the banner times out; Info shows and hides it at once.
   bool _fade = false;
+
+  /// Out of the tree once faded, so nothing of it is left on screen.
+  bool _bannerGone = false;
   Timer? _bannerTimer;
+
+  /// Seconds behind live, refreshed while paused or behind.
+  double _behind = 0;
+  Timer? _behindTimer;
   String _digits = '';
   Timer? _digitTimer;
   Map<String, List<Programme>> _guide = {};
@@ -53,6 +63,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
     widget.tuner.state.addListener(_onTuner);
+    widget.tuner.paused.addListener(_onTuner);
+    _behindTimer = Timer.periodic(const Duration(seconds: 1), (_) => _updateBehind());
     // Coming from the guide's preview: already on this channel.
     final current = widget.tuner.state.value;
     if (current.channel?.id == _channels[_index].id && current.phase != PlayerPhase.failed) {
@@ -68,7 +80,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void dispose() {
     widget.tuner.state.removeListener(_onTuner);
+    widget.tuner.paused.removeListener(_onTuner);
     _bannerTimer?.cancel();
+    _behindTimer?.cancel();
     _digitTimer?.cancel();
     super.dispose();
   }
@@ -80,7 +94,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (phase == PlayerPhase.playing) _showBanner();
   }
 
+  Future<void> _updateBehind() async {
+    if (widget.tuner.state.value.phase != PlayerPhase.playing) return;
+    final behind = await widget.tuner.behindLive() ?? 0;
+    if (!mounted) return;
+    // Within a few seconds of the end of the cache is live.
+    final shown = behind < 5 && !widget.tuner.paused.value ? 0.0 : behind;
+    if ((shown - _behind).abs() >= 1 || (shown == 0) != (_behind == 0)) setState(() => _behind = shown);
+  }
+
   void _tune() {
+    _behind = 0;
     final now = DateTime.now();
     _guide = widget.repository.programmes(now, now.add(const Duration(hours: 4)));
     _showBanner(hold: true);
@@ -99,6 +123,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     setState(() {
       _banner = true;
       _fade = false;
+      _bannerGone = false;
     });
     if (!hold) {
       _bannerTimer = Timer(const Duration(seconds: 5), () {
@@ -118,6 +143,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       setState(() {
         _banner = false;
         _fade = false;
+        _bannerGone = true;
       });
     } else {
       _showBanner();
@@ -153,10 +179,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
   KeyEventResult _onKey(FocusNode _, KeyEvent event) {
     if (!isPress(event)) return KeyEventResult.handled;
     switch (remoteKey(event)) {
-      case RemoteKey.up || RemoteKey.channelUp:
+      case RemoteKey.up || RemoteKey.channelUp || RemoteKey.next:
         _step(1);
-      case RemoteKey.down || RemoteKey.channelDown:
+      case RemoteKey.down || RemoteKey.channelDown || RemoteKey.previous:
         _step(-1);
+      case RemoteKey.playPause:
+        widget.tuner.setPaused(!widget.tuner.paused.value);
+        _showBanner();
+      case RemoteKey.play:
+        widget.tuner.setPaused(false);
+        _showBanner();
+      case RemoteKey.pause:
+        widget.tuner.setPaused(true);
+        _showBanner();
+      case RemoteKey.rewind:
+        widget.tuner.seekBy(-10);
+        _showBanner();
+      case RemoteKey.fastForward:
+        widget.tuner.seekBy(30);
+        _showBanner();
       case RemoteKey.info:
         _toggleBanner();
       case RemoteKey.ok || RemoteKey.left || RemoteKey.right:
@@ -189,6 +230,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _showBanner(hold: true);
           widget.tuner.nextStream();
         }),
+      if (_behind > 0)
+        MenuOption('Back to live', () {
+          widget.tuner.setPaused(false);
+          widget.tuner.seekBy(1 << 20);
+        }),
       MenuOption('Back to the guide', _leave),
     ]);
   }
@@ -208,18 +254,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (state.phase != PlayerPhase.playing) const Positioned.fill(child: ColoredBox(color: Colors.black)),
           if (state.phase == PlayerPhase.opening || state.phase == PlayerPhase.failed)
             Center(child: _status(state, channel)),
-          Positioned(
-            left: 48,
-            right: 48,
-            bottom: 40,
-            child: IgnorePointer(
-              child: AnimatedOpacity(
-                opacity: _banner || state.phase != PlayerPhase.playing ? 1 : 0,
-                duration: _fade ? const Duration(milliseconds: 600) : Duration.zero,
-                child: _bannerPanel(channel, now, next, state),
+          if (!_bannerGone || state.phase != PlayerPhase.playing)
+            Positioned(
+              left: 48,
+              right: 48,
+              bottom: 40,
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  opacity: _banner || state.phase != PlayerPhase.playing ? 1 : 0,
+                  duration: _fade ? const Duration(milliseconds: 600) : Duration.zero,
+                  onEnd: () {
+                    if (mounted && !_banner) setState(() => _bannerGone = true);
+                  },
+                  child: _bannerPanel(channel, now, next, state),
+                ),
               ),
             ),
-          ),
+          // Stays while paused or behind live, after the banner has gone.
+          if (state.phase == PlayerPhase.playing && (widget.tuner.paused.value || _behind > 0))
+            Positioned(top: 40, left: 56, child: _timeshiftBadge()),
           if (_digits.isNotEmpty)
             Positioned(
               top: 40,
@@ -230,6 +283,27 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 child: Text(_digits, style: const TextStyle(fontSize: 64, fontWeight: FontWeight.w600)),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _timeshiftBadge() {
+    final paused = widget.tuner.paused.value;
+    final behind = Duration(seconds: _behind.round());
+    final text = [
+      if (paused) 'Paused',
+      if (behind.inSeconds > 0) '${behind.inMinutes}:${(behind.inSeconds % 60).toString().padLeft(2, '0')} behind live',
+    ].join('  ·  ');
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration: BoxDecoration(color: Tv.panel, borderRadius: BorderRadius.circular(12)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(paused ? Icons.pause : Icons.history, size: 32),
+          const SizedBox(width: 12),
+          Text(text, style: const TextStyle(fontSize: Tv.small)),
         ],
       ),
     );

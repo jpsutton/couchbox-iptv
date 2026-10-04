@@ -72,6 +72,12 @@ class NativeMpvPlayer implements LivePlayer {
   }
 
   @override
+  Future<void> command(List<String> args) async {
+    if (!_initialized) return;
+    await _methods.invokeMethod('command', {'args': args});
+  }
+
+  @override
   Future<void> stop() async {
     if (!_initialized) return;
     await _methods.invokeMethod('command', {

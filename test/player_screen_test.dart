@@ -27,6 +27,8 @@ class FakePlayer implements LivePlayer {
   @override
   Future<void> setOption(String name, String value) async {}
   @override
+  Future<void> command(List<String> args) async {}
+  @override
   Stream<PlayerStatus> get status => _status.stream;
   @override
   Future<String?> property(String name) async => null;
@@ -76,7 +78,8 @@ void main() {
     expect(tuner.state.value.phase, PlayerPhase.playing);
     expect(tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).opacity, 1);
     await tester.pump(const Duration(seconds: 6));
-    expect(tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).opacity, 0);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(AnimatedOpacity), findsNothing);
   });
 
   testWidgets('the banner hides 5 s after arriving from the preview', (tester) async {
@@ -85,7 +88,8 @@ void main() {
     await pump(tester);
     expect(tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).opacity, 1);
     await tester.pump(const Duration(seconds: 6));
-    expect(tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).opacity, 0);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(AnimatedOpacity), findsNothing);
   });
 
   testWidgets('Info hides and shows the banner at once', (tester) async {
@@ -94,13 +98,14 @@ void main() {
     AnimatedOpacity banner() => tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity));
     await tester.sendKeyEvent(LogicalKeyboardKey.info);
     await tester.pump();
-    expect(banner().opacity, 0);
-    expect(banner().duration, Duration.zero);
+    expect(find.byType(AnimatedOpacity), findsNothing); // gone at once
     await tester.sendKeyEvent(LogicalKeyboardKey.info);
     await tester.pump();
     expect(banner().opacity, 1);
-    await tester.pump(const Duration(seconds: 6));
+    await tester.pump(const Duration(seconds: 5, milliseconds: 100));
     expect(banner().opacity, 0);
     expect(banner().duration, isNot(Duration.zero)); // the timeout fades
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(AnimatedOpacity), findsNothing); // then leaves the tree
   });
 }
