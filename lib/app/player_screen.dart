@@ -1,0 +1,290 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import '../data/database.dart';
+import '../player/live_player.dart';
+import 'keys.dart';
+import 'options_menu.dart';
+import 'repository.dart';
+import 'tuner.dart';
+import 'widgets.dart';
+
+/// Full-screen playback. Up/Down or Channel Up/Down change channel, digits
+/// tune by number, OK or Info shows what's on, Menu has options, Back or Stop
+/// returns to the list.
+class PlayerScreen extends StatefulWidget {
+  const PlayerScreen({
+    super.key,
+    required this.repository,
+    required this.tuner,
+    required this.channels,
+    required this.allChannels,
+    required this.start,
+  });
+
+  final Repository repository;
+  final Tuner tuner;
+
+  /// The list the viewer came from (a filter), for Up/Down.
+  final List<ChannelEntry> channels;
+
+  /// Every channel, for tuning by number.
+  final List<ChannelEntry> allChannels;
+  final int start;
+
+  @override
+  State<PlayerScreen> createState() => _PlayerScreenState();
+}
+
+class _PlayerScreenState extends State<PlayerScreen> {
+  late List<ChannelEntry> _channels = widget.channels;
+  late int _index = widget.start;
+  bool _banner = true;
+  Timer? _bannerTimer;
+  String _digits = '';
+  Timer? _digitTimer;
+  Map<String, List<Programme>> _guide = {};
+
+  @override
+  void initState() {
+    super.initState();
+    widget.tuner.state.addListener(_onTuner);
+    _tune();
+  }
+
+  @override
+  void dispose() {
+    widget.tuner.state.removeListener(_onTuner);
+    _bannerTimer?.cancel();
+    _digitTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onTuner() {
+    if (!mounted) return;
+    setState(() {});
+    final phase = widget.tuner.state.value.phase;
+    if (phase == PlayerPhase.playing) _showBanner();
+  }
+
+  void _tune() {
+    final now = DateTime.now();
+    _guide = widget.repository.programmes(now, now.add(const Duration(hours: 4)));
+    _showBanner(hold: true);
+    widget.tuner.tune(_channels[_index]);
+  }
+
+  void _step(int by) {
+    if (_channels.isEmpty) return;
+    setState(() => _index = (_index + by) % _channels.length);
+    _tune();
+  }
+
+  /// Shows the banner; it hides 5 s after the picture appears.
+  void _showBanner({bool hold = false}) {
+    _bannerTimer?.cancel();
+    setState(() => _banner = true);
+    if (!hold) _bannerTimer = Timer(const Duration(seconds: 5), () => mounted ? setState(() => _banner = false) : null);
+  }
+
+  void _digit(int d) {
+    _digitTimer?.cancel();
+    setState(() => _digits = '$_digits$d'.substring(_digits.length >= 4 ? 1 : 0));
+    _digitTimer = Timer(const Duration(milliseconds: 1500), _tuneDigits);
+  }
+
+  void _tuneDigits() {
+    final number = int.tryParse(_digits);
+    setState(() => _digits = '');
+    if (number == null) return;
+    final channel = widget.allChannels.where((c) => c.number == number).firstOrNull;
+    if (channel == null) return;
+    // Tuning by number leaves the filtered list for the full one.
+    setState(() {
+      _channels = widget.allChannels;
+      _index = widget.allChannels.indexOf(channel);
+    });
+    _tune();
+  }
+
+  Future<void> _leave() async {
+    await widget.tuner.stop();
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  KeyEventResult _onKey(FocusNode _, KeyEvent event) {
+    if (!isPress(event)) return KeyEventResult.handled;
+    switch (remoteKey(event)) {
+      case RemoteKey.up || RemoteKey.channelUp:
+        _step(1);
+      case RemoteKey.down || RemoteKey.channelDown:
+        _step(-1);
+      case RemoteKey.ok || RemoteKey.info || RemoteKey.left || RemoteKey.right:
+        _showBanner();
+      case RemoteKey.back || RemoteKey.stop:
+        _leave();
+      case RemoteKey.menu:
+        _menu();
+      case RemoteKey.digit:
+        _digit(digitOf(event)!);
+      case RemoteKey.other:
+        break;
+    }
+    return KeyEventResult.handled;
+  }
+
+  void _menu() {
+    final channel = _channels[_index];
+    final state = widget.tuner.state.value;
+    showOptionsMenu(context, '${channel.number}  ${channel.name}', [
+      MenuOption(channel.favourite ? 'Remove from Favourites' : 'Add to Favourites', () {
+        channel.favourite = !channel.favourite;
+        widget.repository.setFavourite(channel.id, channel.favourite);
+        setState(() {});
+      }),
+      if (state.attempt > 0 && state.attempt < channel.streams.length)
+        MenuOption('Try another stream (${state.attempt + 1} of ${channel.streams.length})', () {
+          _showBanner(hold: true);
+          widget.tuner.nextStream();
+        }),
+      MenuOption('Back to the channel list', _leave),
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = widget.tuner.state.value;
+    final channel = _channels[_index];
+    final (:now, :next) = nowAndNext(_guide[channel.id], DateTime.now());
+    return Focus(
+      autofocus: true,
+      onKeyEvent: _onKey,
+      child: Stack(
+        children: [
+          // Transparent: the native video plane shows through.
+          Positioned.fill(child: widget.tuner.player.view()),
+          if (state.phase != PlayerPhase.playing) const Positioned.fill(child: ColoredBox(color: Colors.black)),
+          if (state.phase == PlayerPhase.opening || state.phase == PlayerPhase.failed)
+            Center(child: _status(state, channel)),
+          if (_banner || state.phase != PlayerPhase.playing)
+            Positioned(left: 48, right: 48, bottom: 40, child: _bannerPanel(channel, now, next, state)),
+          if (_digits.isNotEmpty)
+            Positioned(
+              top: 40,
+              right: 56,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                decoration: BoxDecoration(color: Tv.panel, borderRadius: BorderRadius.circular(12)),
+                child: Text(_digits, style: const TextStyle(fontSize: 64, fontWeight: FontWeight.w600)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _status(TunerState state, ChannelEntry channel) {
+    final text = state.phase == PlayerPhase.failed
+        ? '${state.message ?? 'Could not play this channel'}\nUp/Down for another channel'
+        : channel.streams.length > 1
+        ? 'Tuning (stream ${state.attempt} of ${channel.streams.length})'
+        : 'Tuning';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (state.phase == PlayerPhase.opening) const CircularProgressIndicator(),
+        const SizedBox(height: 24),
+        Text(
+          text,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: Tv.body),
+        ),
+      ],
+    );
+  }
+
+  Widget _bannerPanel(ChannelEntry channel, Programme? now, Programme? next, TunerState state) {
+    final at = DateTime.now();
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(color: Tv.panel, borderRadius: BorderRadius.circular(16)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${channel.number}',
+            style: const TextStyle(fontSize: Tv.title, color: Colors.white70),
+          ),
+          const SizedBox(width: 24),
+          ChannelLogo(name: channel.name, path: channel.logoPath, size: 96),
+          const SizedBox(width: 24),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        channel.name,
+                        style: const TextStyle(fontSize: Tv.title, fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (channel.favourite) const Padding(padding: EdgeInsets.only(left: 12), child: Icon(Icons.star)),
+                    const Spacer(),
+                    Text(
+                      clock(at),
+                      style: const TextStyle(fontSize: Tv.body, color: Colors.white70),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (now != null) ...[
+                  Text(
+                    '${clock(now.start)}-${clock(now.stop)}  ${now.title}${now.subtitle == null ? '' : ': ${now.subtitle}'}',
+                    style: const TextStyle(fontSize: Tv.body),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: LinearProgressIndicator(value: progress(now, at), minHeight: 6),
+                  ),
+                  if (now.description != null)
+                    Text(
+                      now.description!,
+                      style: const TextStyle(fontSize: Tv.small, color: Colors.white70),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ] else
+                  const Text(
+                    'No guide information',
+                    style: TextStyle(fontSize: Tv.body, color: Colors.white54),
+                  ),
+                if (next != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Next: ${clock(next.start)}  ${next.title}',
+                      style: const TextStyle(fontSize: Tv.small, color: Colors.white54),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                if (state.stream?.quality != null && state.phase == PlayerPhase.playing)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      state.stream!.quality!,
+                      style: const TextStyle(fontSize: Tv.small, color: Colors.white38),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

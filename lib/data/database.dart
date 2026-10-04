@@ -55,13 +55,20 @@ class IptvDatabase {
 
   final Database db;
 
-  static const schemaVersion = 1;
+  static const schemaVersion = 2;
 
   factory IptvDatabase.open(String path) {
     File(path).parent.createSync(recursive: true);
     final db = sqlite3.open(path);
     db.execute('PRAGMA journal_mode = WAL');
     db.execute('PRAGMA busy_timeout = 5000');
+    final database = IptvDatabase._(db);
+    database._migrate();
+    return database;
+  }
+
+  /// An already open connection, migrated to the current schema.
+  factory IptvDatabase.wrap(Database db) {
     final database = IptvDatabase._(db);
     database._migrate();
     return database;
@@ -80,6 +87,18 @@ class IptvDatabase {
     db.execute('PRAGMA foreign_keys = ON');
     final version = db.select('PRAGMA user_version').first.columnAt(0) as int;
     if (version >= schemaVersion) return;
+    if (version < 1) _createV1();
+    if (version < 2) {
+      // Set by the app when mpv cannot play a stream the checker passed (a
+      // DASH manifest FFmpeg can't read, say). Kept apart from the check
+      // result, which the next refresh overwrites.
+      db.execute('ALTER TABLE streams ADD COLUMN play_failed_at INTEGER');
+      db.execute('ALTER TABLE streams ADD COLUMN play_failure TEXT');
+    }
+    db.execute('PRAGMA user_version = $schemaVersion');
+  }
+
+  void _createV1() {
     db.execute('''
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
       CREATE TABLE IF NOT EXISTS channels (
@@ -134,7 +153,6 @@ class IptvDatabase {
       CREATE INDEX IF NOT EXISTS streams_channel ON streams (channel_id, rank);
       CREATE INDEX IF NOT EXISTS programmes_time ON programmes (start, stop);
     ''');
-    db.execute('PRAGMA user_version = $schemaVersion');
   }
 
   void _transaction(void Function() body) {

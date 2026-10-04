@@ -55,6 +55,12 @@ class NativeMpvPlayer implements LivePlayer {
       _methods.invokeMethod('setProperty', {'name': name, 'value': value});
 
   @override
+  Future<void> setOption(String name, String value) async {
+    await init();
+    await _setProperty(name, value);
+  }
+
+  @override
   Future<void> open(String url, {Map<String, String> headers = const {}}) async {
     await init();
     await _setProperty('http-header-fields', httpHeaderFields(headers));

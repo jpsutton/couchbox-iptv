@@ -1,0 +1,101 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+
+import '../player/live_player.dart';
+import '../settings.dart';
+import 'languages.dart';
+import 'repository.dart';
+
+/// What the tuner is doing, for the player screen.
+class TunerState {
+  const TunerState({this.channel, this.stream, this.attempt = 0, this.phase = PlayerPhase.idle, this.message});
+
+  final ChannelEntry? channel;
+  final PlayableStream? stream;
+
+  /// 1-based index into the channel's streams.
+  final int attempt;
+  final PlayerPhase phase;
+  final String? message;
+}
+
+/// Tunes channels on a [LivePlayer]: tries a channel's streams in order until
+/// one shows a picture, and tells the repository which ones fail.
+class Tuner {
+  Tuner(this.player, this.repository, {this.tuneTimeout = const Duration(seconds: 15)});
+
+  final LivePlayer player;
+  final Repository repository;
+  final Duration tuneTimeout;
+  final state = ValueNotifier(const TunerState());
+  int _generation = 0;
+
+  /// Applies the preferred audio and subtitle languages.
+  Future<void> configure(Settings settings) async {
+    await player.init();
+    await player.setOption('alang', mpvLanguageList(settings.audioLanguages));
+    await player.setOption('slang', mpvLanguageList(settings.subtitleLanguages));
+    // No subtitles unless asked for (forced ones still show).
+    await player.setOption('sid', settings.subtitleLanguages.isEmpty ? 'no' : 'auto');
+  }
+
+  /// Tunes [channel], starting with its stream at [from] (to skip to the
+  /// next stream after a bad picture).
+  Future<void> tune(ChannelEntry channel, {int from = 0}) async {
+    final generation = ++_generation;
+    repository.lastChannel = channel.id;
+    final streams = channel.streams;
+    for (var i = from; i < streams.length; i++) {
+      final stream = streams[i];
+      state.value = TunerState(channel: channel, stream: stream, attempt: i + 1, phase: PlayerPhase.opening);
+      final result = await _try(stream);
+      if (generation != _generation) return; // Another tune took over.
+      if (result.phase == PlayerPhase.playing) {
+        repository.recordPlaySuccess(stream.id);
+        state.value = TunerState(channel: channel, stream: stream, attempt: i + 1, phase: PlayerPhase.playing);
+        return;
+      }
+      repository.recordPlayFailure(stream.id, result.error ?? 'failed');
+    }
+    if (generation != _generation) return;
+    await player.stop();
+    state.value = TunerState(
+      channel: channel,
+      phase: PlayerPhase.failed,
+      message: streams.isEmpty ? 'No streams for this channel' : 'None of the ${streams.length} streams played',
+    );
+  }
+
+  /// Gives up on the current stream and tries the channel's next one.
+  Future<void> nextStream() async {
+    final current = state.value;
+    if (current.channel == null) return;
+    if (current.stream != null) repository.recordPlayFailure(current.stream!.id, 'skipped by the viewer');
+    await tune(current.channel!, from: current.attempt);
+  }
+
+  Future<PlayerStatus> _try(PlayableStream stream) async {
+    final done = Completer<PlayerStatus>();
+    final sub = player.status.listen((s) {
+      if (!done.isCompleted && (s.phase == PlayerPhase.playing || s.phase == PlayerPhase.failed)) done.complete(s);
+    });
+    try {
+      await player.open(stream.url, headers: stream.headers);
+      return await done.future.timeout(
+        tuneTimeout,
+        onTimeout: () => const PlayerStatus(PlayerPhase.failed, 'no picture within 15 s'),
+      );
+    } catch (e) {
+      return PlayerStatus(PlayerPhase.failed, e.toString());
+    } finally {
+      await sub.cancel();
+    }
+  }
+
+  Future<void> stop() async {
+    _generation++;
+    await player.stop();
+    state.value = const TunerState();
+  }
+}

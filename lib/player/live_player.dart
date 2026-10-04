@@ -13,8 +13,9 @@ class PlayerStatus {
   String toString() => error == null ? phase.name : '${phase.name}: $error';
 }
 
-/// A live stream player. The app talks only to this, so the backend (the
-/// native mpv plane or media_kit's texture) can be swapped.
+/// A live stream player. The app talks only to this, so the backend can be
+/// swapped (M0 compared the native mpv plane with media_kit's texture; see
+/// docs/m0.md).
 abstract class LivePlayer {
   /// Short name for logs and the M0 results.
   String get name;
@@ -26,6 +27,9 @@ abstract class LivePlayer {
   Future<void> open(String url, {Map<String, String> headers = const {}});
 
   Future<void> stop();
+
+  /// Sets an mpv option, e.g. alang.
+  Future<void> setOption(String name, String value);
 
   /// Changes as a stream opens, shows its first frame, or fails.
   Stream<PlayerStatus> get status;
@@ -40,8 +44,8 @@ abstract class LivePlayer {
   Future<void> dispose();
 }
 
-/// mpv options shared by both backends: hardware decoding, and a stream that
-/// stops answering fails quickly instead of hanging.
+/// mpv options for live streams: hardware decoding, and a stream that stops
+/// answering fails quickly instead of hanging.
 const Map<String, String> liveMpvOptions = {
   'hwdec': 'auto-safe',
   'network-timeout': '10',
