@@ -1,0 +1,14 @@
+[Unit]
+Description=couchbox-iptv: refresh the guide
+Documentation=https://github.com/jpsutton/couchbox-iptv
+
+[Service]
+Type=oneshot
+# Guide only: one small download. Skipped while the nightly refresh holds the
+# lock (it fetches the guide too).
+ExecStart=/usr/bin/couchbox-iptv-refresh --no-catalog --no-check --no-logos
+Nice=19
+CPUSchedulingPolicy=idle
+IOSchedulingClass=idle
+CPUWeight=idle
+IOWeight=1

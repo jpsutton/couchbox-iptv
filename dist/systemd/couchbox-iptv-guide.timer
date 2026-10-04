@@ -1,0 +1,12 @@
+[Unit]
+Description=couchbox-iptv: refresh the guide every 4 hours
+
+[Timer]
+# The Pluto guide reaches about a day ahead and is updated through the day;
+# fetching it every few hours keeps the next 12 hours or so filled in.
+OnCalendar=00/4:15
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

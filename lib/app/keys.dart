@@ -13,7 +13,11 @@ final _logKeys = Platform.environment['COUCHBOX_IPTV_KEYS'] == '1';
 RemoteKey remoteKey(KeyEvent event) {
   final key = event.logicalKey;
   if (_logKeys) {
-    stdout.writeln('key ${event.runtimeType} logical=${key.debugName} physical=${event.physicalKey.debugName}');
+    // debugName is null in release builds; log the ids.
+    stdout.writeln(
+      'key ${event.runtimeType} logical=0x${key.keyId.toRadixString(16)} label="${key.keyLabel}" '
+      'physical=0x${event.physicalKey.usbHidUsage.toRadixString(16)} character=${event.character}',
+    );
   }
   if (key == LogicalKeyboardKey.arrowUp) return RemoteKey.up;
   if (key == LogicalKeyboardKey.arrowDown) return RemoteKey.down;

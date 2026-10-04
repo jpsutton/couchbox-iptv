@@ -31,6 +31,8 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
   bool _inFilterBar = false;
   DateTime _now = DateTime.now();
   final _scroll = ScrollController();
+  final _filterScroll = ScrollController();
+  List<GlobalKey> _filterKeys = [];
   Timer? _tick;
 
   @override
@@ -45,6 +47,7 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
   void dispose() {
     _tick?.cancel();
     _scroll.dispose();
+    _filterScroll.dispose();
     super.dispose();
   }
 
@@ -60,6 +63,7 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
     }
     final categories = counts.keys.toList()..sort((a, b) => counts[b]!.compareTo(counts[a]!));
     _filters = ['All', 'Favourites', ...categories];
+    _filterKeys = [for (final _ in _filters) GlobalKey()];
     _filter = _filter.clamp(0, _filters.length - 1);
     _row = _row.clamp(0, (_visible.length - 1).clamp(0, 1 << 30));
   }
@@ -103,6 +107,15 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
     _scrollTo(_row);
   }
 
+  /// Selects filter [i] and scrolls the bar so it stays on screen.
+  void _selectFilter(int i) {
+    setState(() => _filter = i.clamp(0, _filters.length - 1));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final chip = _filterKeys[_filter].currentContext;
+      if (chip != null) Scrollable.ensureVisible(chip, alignment: 0.5, duration: const Duration(milliseconds: 150));
+    });
+  }
+
   void _scrollTo(int row) {
     if (!_scroll.hasClients) return;
     final viewport = _scroll.position.viewportDimension;
@@ -120,9 +133,9 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
     if (_inFilterBar) {
       switch (key) {
         case RemoteKey.left:
-          setState(() => _filter = (_filter - 1).clamp(0, _filters.length - 1));
+          _selectFilter(_filter - 1);
         case RemoteKey.right:
-          setState(() => _filter = (_filter + 1).clamp(0, _filters.length - 1));
+          _selectFilter(_filter + 1);
         case RemoteKey.down || RemoteKey.ok:
           setState(() {
             _inFilterBar = false;
@@ -236,6 +249,7 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
     return SizedBox(
       height: 56,
       child: ListView.separated(
+        controller: _filterScroll,
         scrollDirection: Axis.horizontal,
         itemCount: _filters.length,
         separatorBuilder: (_, _) => const SizedBox(width: 12),
@@ -243,6 +257,7 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
           final active = i == _filter;
           final focused = active && _inFilterBar;
           return Container(
+            key: _filterKeys[i],
             padding: const EdgeInsets.symmetric(horizontal: 20),
             alignment: Alignment.center,
             decoration: BoxDecoration(
