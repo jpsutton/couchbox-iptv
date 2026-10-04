@@ -54,9 +54,9 @@ never disturb what is on screen.
   controllers, so `IOWeight` does nothing there; `IOSchedulingClass=idle`
   still applies (checked 2026-10-04).
 - **Network**, which no scheduler setting covers: few checks at a time, and
-  only a playlist plus one short segment per stream. While a video plays (in
-  this app or any other: an MPRIS player playing, or a PipeWire stream), the
-  job lowers its own download rate and concurrency rather than pausing.
+  only a playlist plus one short segment per stream: six at a time. While
+  anything plays (an uncorked PipeWire stream, from `pactl -f json list
+  sink-inputs`), one at a time with a 1 s gap, rather than pausing.
 - "Refresh now" in the app runs with the same limits.
 
 ## App
