@@ -441,7 +441,11 @@ class _GuideScreenState extends State<GuideScreen> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (channel.favourite) const Padding(padding: EdgeInsets.only(left: 12), child: Icon(Icons.star)),
+            if (channel.favourite)
+              const Padding(
+                padding: EdgeInsets.only(left: 12),
+                child: Icon(Icons.star, color: Colors.white),
+              ),
           ],
         ),
         const SizedBox(height: 16),

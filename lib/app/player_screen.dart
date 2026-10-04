@@ -13,7 +13,8 @@ import 'widgets.dart';
 /// Full-screen playback. Up/Down, Channel Up/Down or Next/Previous change
 /// channel, digits tune by number, OK shows what's on and Info toggles it,
 /// Menu has options. Play/Pause pauses live TV (the cache keeps filling);
-/// Rewind and Fast Forward move within the cache, never past live. Back
+/// Left/Right skip 10 s back/on and Rewind/Fast Forward 10 s/30 s, within the
+/// cache and never past live. Back
 /// returns to the guide with the channel still playing in its preview; Stop
 /// stops it.
 class PlayerScreen extends StatefulWidget {
@@ -221,7 +222,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _showBanner();
       case RemoteKey.info:
         _toggleBanner();
-      case RemoteKey.ok || RemoteKey.left || RemoteKey.right:
+      case RemoteKey.left:
+        _timeshift();
+        widget.tuner.seekBy(-10);
+        _showBanner();
+      case RemoteKey.right:
+        widget.tuner.seekBy(10);
+        _showBanner();
+      case RemoteKey.ok:
         _showBanner();
       case RemoteKey.back:
         _leave();
@@ -320,7 +328,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       child: const Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.pause, size: 32),
+          Icon(Icons.pause, size: 32, color: Colors.white),
           SizedBox(width: 12),
           Text('Paused', style: TextStyle(fontSize: Tv.small)),
         ],
@@ -383,7 +391,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (channel.favourite) const Padding(padding: EdgeInsets.only(left: 12), child: Icon(Icons.star)),
+                    if (channel.favourite)
+                      const Padding(
+                        padding: EdgeInsets.only(left: 12),
+                        child: Icon(Icons.star, color: Colors.white),
+                      ),
                     const Spacer(),
                     Text(
                       clock(at),

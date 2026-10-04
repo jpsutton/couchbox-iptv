@@ -85,7 +85,8 @@ RemoteKey remoteKey(KeyEvent event) {
     return RemoteKey.playPause;
   }
   if (key == LogicalKeyboardKey.mediaPlay) return RemoteKey.play;
-  if (key == LogicalKeyboardKey.mediaPause) return RemoteKey.pause;
+  // The MCE remote's Pause is evdev KEY_PAUSE, the keyboard Pause key.
+  if (key == LogicalKeyboardKey.mediaPause || key == LogicalKeyboardKey.pause) return RemoteKey.pause;
   if (key == LogicalKeyboardKey.mediaFastForward) return RemoteKey.fastForward;
   if (key == LogicalKeyboardKey.mediaRewind) return RemoteKey.rewind;
   if (key == LogicalKeyboardKey.mediaTrackNext) return RemoteKey.next;
