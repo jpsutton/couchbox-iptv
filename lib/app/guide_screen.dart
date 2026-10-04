@@ -55,6 +55,8 @@ class _GuideScreenState extends State<GuideScreen> {
   Timer? _previewTimer;
   String _digits = '';
   Timer? _digitTimer;
+  late final AppLifecycleListener _lifecycle;
+  bool _started = false;
 
   @override
   void initState() {
@@ -68,15 +70,22 @@ class _GuideScreenState extends State<GuideScreen> {
     if (at >= 0) _row = at;
     widget.tuner.state.addListener(_onTuner);
     _tick = Timer.periodic(const Duration(seconds: 30), (_) => _onTick());
+    // The first preview waits until the window is on screen: a video plane
+    // started before then gets no frame callbacks and shows one still frame
+    // while the sound plays on.
+    _lifecycle = AppLifecycleListener(onResume: _onResume);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToRow();
-      _schedulePreview(immediately: true);
+      if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) _onResume();
     });
+    // In case the window never reports itself active.
+    Timer(const Duration(seconds: 3), () => mounted && !_started ? _onResume() : null);
   }
 
   @override
   void dispose() {
     widget.tuner.state.removeListener(_onTuner);
+    _lifecycle.dispose();
     _tick?.cancel();
     _previewTimer?.cancel();
     _digitTimer?.cancel();
@@ -86,6 +95,16 @@ class _GuideScreenState extends State<GuideScreen> {
   }
 
   void _onTuner() => mounted ? setState(() {}) : null;
+
+  void _onResume() {
+    if (!_started) {
+      _started = true;
+      Timer(const Duration(milliseconds: 800), () => mounted ? _schedulePreview(immediately: true) : null);
+    } else {
+      // Back on screen: the plane may have stopped presenting while hidden.
+      widget.tuner.player.redraw();
+    }
+  }
 
   void _onTick() {
     setState(() {

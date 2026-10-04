@@ -78,6 +78,12 @@ class NativeMpvPlayer implements LivePlayer {
   }
 
   @override
+  Future<void> redraw() async {
+    if (!_initialized) return;
+    await _methods.invokeMethod('updateFrame');
+  }
+
+  @override
   Future<void> stop() async {
     if (!_initialized) return;
     await _methods.invokeMethod('command', {

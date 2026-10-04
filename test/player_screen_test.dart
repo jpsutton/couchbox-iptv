@@ -29,6 +29,8 @@ class FakePlayer implements LivePlayer {
   @override
   Future<void> command(List<String> args) async {}
   @override
+  Future<void> redraw() async {}
+  @override
   Stream<PlayerStatus> get status => _status.stream;
   @override
   Future<String?> property(String name) async => null;

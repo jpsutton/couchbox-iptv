@@ -34,6 +34,9 @@ abstract class LivePlayer {
   /// Runs an mpv command, e.g. ['seek', '-10'].
   Future<void> command(List<String> args);
 
+  /// Redraws the picture now (after the window was hidden, say).
+  Future<void> redraw();
+
   /// Changes as a stream opens, shows its first frame, or fails.
   Stream<PlayerStatus> get status;
 
