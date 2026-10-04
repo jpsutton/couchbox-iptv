@@ -102,7 +102,17 @@ class NativeMpvPlayer implements LivePlayer {
     await _status.close();
   }
 
-  static Future<void> setVideoRect(Rect physical, double devicePixelRatio) => _methods.invokeMethod('setVideoRect', {
+  /// The rect last sent, by any view: the guide's preview box and the
+  /// full-screen player share the one plane.
+  static Rect? _lastRect;
+
+  static Future<void> setVideoRect(Rect physical, double devicePixelRatio) {
+    if (physical == _lastRect) return Future.value();
+    _lastRect = physical;
+    return _setVideoRect(physical, devicePixelRatio);
+  }
+
+  static Future<void> _setVideoRect(Rect physical, double devicePixelRatio) => _methods.invokeMethod('setVideoRect', {
     'left': physical.left.floor(),
     'top': physical.top.floor(),
     'right': physical.right.ceil(),
@@ -121,8 +131,6 @@ class _VideoPlane extends StatefulWidget {
 }
 
 class _VideoPlaneState extends State<_VideoPlane> {
-  Rect? _sent;
-
   void _sendRect() {
     if (!mounted) return;
     final box = context.findRenderObject() as RenderBox?;
@@ -130,8 +138,6 @@ class _VideoPlaneState extends State<_VideoPlane> {
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final rect = (box.localToGlobal(Offset.zero) & box.size);
     final physical = Rect.fromLTRB(rect.left * dpr, rect.top * dpr, rect.right * dpr, rect.bottom * dpr);
-    if (physical == _sent) return;
-    _sent = physical;
     NativeMpvPlayer.setVideoRect(physical, dpr);
   }
 

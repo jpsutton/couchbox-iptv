@@ -11,8 +11,8 @@ import 'tuner.dart';
 import 'widgets.dart';
 
 /// Full-screen playback. Up/Down or Channel Up/Down change channel, digits
-/// tune by number, OK or Info shows what's on, Menu has options, Back or Stop
-/// returns to the list.
+/// tune by number, OK or Info shows what's on, Menu has options. Back returns
+/// to the guide with the channel still playing in its preview; Stop stops it.
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
     super.key,
@@ -50,7 +50,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
     widget.tuner.state.addListener(_onTuner);
-    _tune();
+    // Coming from the guide's preview: already on this channel.
+    final current = widget.tuner.state.value;
+    if (current.channel?.id == _channels[_index].id && current.phase != PlayerPhase.failed) {
+      final now = DateTime.now();
+      _guide = widget.repository.programmes(now, now.add(const Duration(hours: 4)));
+      _showBanner();
+    } else {
+      _tune();
+    }
   }
 
   @override
@@ -108,8 +116,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _tune();
   }
 
-  Future<void> _leave() async {
-    await widget.tuner.stop();
+  /// Back to the guide; [stop] also stops playback.
+  Future<void> _leave({bool stop = false}) async {
+    if (stop) await widget.tuner.stop();
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -122,8 +131,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _step(-1);
       case RemoteKey.ok || RemoteKey.info || RemoteKey.left || RemoteKey.right:
         _showBanner();
-      case RemoteKey.back || RemoteKey.stop:
+      case RemoteKey.back:
         _leave();
+      case RemoteKey.stop:
+        _leave(stop: true);
       case RemoteKey.menu:
         _menu();
       case RemoteKey.digit:
@@ -148,7 +159,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _showBanner(hold: true);
           widget.tuner.nextStream();
         }),
-      MenuOption('Back to the channel list', _leave),
+      MenuOption('Back to the guide', _leave),
     ]);
   }
 

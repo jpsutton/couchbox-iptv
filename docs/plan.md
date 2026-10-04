@@ -106,9 +106,9 @@ Channels without data show "No information".
 | | Goal | Status |
 |---|---|---|
 | M0 | Player comparison on the M715q | Done: native plane (`m0.md`) |
-| M1 | Background job and database | Built; first full run on the M715q |
-| M2 | Player and channel list | |
-| M3 | Guide | |
+| M1 | Background job and database | Done |
+| M2 | Player and channel list | Done (the list became the guide in M3) |
+| M3 | Guide | Built; on the M715q for testing |
 | M4 | Packaging, tile, timer, CI | |
 | M5 | Polish: other streams per channel, search, guide option B | |
 

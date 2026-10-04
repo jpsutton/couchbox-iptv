@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'app/channel_list_screen.dart';
+import 'app/guide_screen.dart';
 import 'app/repository.dart';
 import 'app/tuner.dart';
 import 'data/database.dart';
@@ -14,16 +14,18 @@ import 'settings.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final repository = Repository(IptvDatabase.open(Paths.database));
+  final settings = Settings.load();
   final tuner = Tuner(NativeMpvPlayer(), repository);
-  await tuner.configure(Settings.load());
-  runApp(IptvApp(repository: repository, tuner: tuner));
+  await tuner.configure(settings);
+  runApp(IptvApp(repository: repository, tuner: tuner, settings: settings));
 }
 
 class IptvApp extends StatelessWidget {
-  const IptvApp({super.key, required this.repository, required this.tuner});
+  const IptvApp({super.key, required this.repository, required this.tuner, required this.settings});
 
   final Repository repository;
   final Tuner tuner;
+  final Settings settings;
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +42,7 @@ class IptvApp extends StatelessWidget {
       ),
       home: Material(
         type: MaterialType.transparency,
-        child: ChannelListScreen(repository: repository, tuner: tuner),
+        child: GuideScreen(repository: repository, tuner: tuner, settings: settings),
       ),
     );
   }

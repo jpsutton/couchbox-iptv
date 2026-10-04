@@ -13,6 +13,7 @@ class Settings {
     this.audioLanguages = const ['eng'],
     this.subtitleLanguages = const [],
     this.hideDead = true,
+    this.preview = true,
   });
 
   factory Settings.fromJson(Map<String, dynamic> json) {
@@ -26,6 +27,7 @@ class Settings {
       audioLanguages: list('audio_languages', d.audioLanguages),
       subtitleLanguages: list('subtitle_languages', d.subtitleLanguages),
       hideDead: json['hide_dead'] as bool? ?? d.hideDead,
+      preview: json['preview'] as bool? ?? d.preview,
     );
   }
 
@@ -45,6 +47,9 @@ class Settings {
   /// Leave streams that failed their last check out of the guide.
   final bool hideDead;
 
+  /// Play the focused channel in a box above the guide.
+  final bool preview;
+
   Map<String, Object?> toJson() => {
     'countries': countries,
     'languages': languages,
@@ -52,6 +57,7 @@ class Settings {
     'audio_languages': audioLanguages,
     'subtitle_languages': subtitleLanguages,
     'hide_dead': hideDead,
+    'preview': preview,
   };
 
   static File get file => File('${Paths.config}/settings.json');
