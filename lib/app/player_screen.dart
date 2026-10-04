@@ -52,8 +52,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _bannerGone = false;
   Timer? _bannerTimer;
 
-  /// Seconds behind live, refreshed while paused or behind.
+  /// Seconds behind live after a pause or rewind, shown in the banner. mpv
+  /// always reads some seconds ahead of playback, so that normal lead
+  /// ([_lead], measured while not time-shifted) is subtracted.
   double _behind = 0;
+  double _lead = 0;
+  bool _timeshifted = false;
   Timer? _behindTimer;
   String _digits = '';
   Timer? _digitTimer;
@@ -96,15 +100,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _updateBehind() async {
     if (widget.tuner.state.value.phase != PlayerPhase.playing) return;
-    final behind = await widget.tuner.behindLive() ?? 0;
-    if (!mounted) return;
-    // Within a few seconds of the end of the cache is live.
-    final shown = behind < 5 && !widget.tuner.paused.value ? 0.0 : behind;
-    if ((shown - _behind).abs() >= 1 || (shown == 0) != (_behind == 0)) setState(() => _behind = shown);
+    final ahead = await widget.tuner.behindLive();
+    if (!mounted || ahead == null) return;
+    if (!_timeshifted) {
+      _lead = ahead;
+      return;
+    }
+    final behind = (ahead - _lead).clamp(0.0, double.infinity);
+    // Caught up (fast forward, or Back to live).
+    if (behind < 5 && !widget.tuner.paused.value) {
+      setState(() {
+        _timeshifted = false;
+        _behind = 0;
+      });
+    } else if ((behind - _behind).abs() >= 1) {
+      setState(() => _behind = behind);
+    }
   }
+
+  void _timeshift() => _timeshifted = true;
 
   void _tune() {
     _behind = 0;
+    _timeshifted = false;
     final now = DateTime.now();
     _guide = widget.repository.programmes(now, now.add(const Duration(hours: 4)));
     _showBanner(hold: true);
@@ -184,15 +202,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
       case RemoteKey.down || RemoteKey.channelDown || RemoteKey.previous:
         _step(-1);
       case RemoteKey.playPause:
+        if (!widget.tuner.paused.value) _timeshift();
         widget.tuner.setPaused(!widget.tuner.paused.value);
         _showBanner();
       case RemoteKey.play:
         widget.tuner.setPaused(false);
         _showBanner();
       case RemoteKey.pause:
+        _timeshift();
         widget.tuner.setPaused(true);
         _showBanner();
       case RemoteKey.rewind:
+        _timeshift();
         widget.tuner.seekBy(-10);
         _showBanner();
       case RemoteKey.fastForward:
@@ -230,7 +251,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _showBanner(hold: true);
           widget.tuner.nextStream();
         }),
-      if (_behind > 0)
+      if (_timeshifted)
         MenuOption('Back to live', () {
           widget.tuner.setPaused(false);
           widget.tuner.seekBy(1 << 20);
@@ -270,9 +291,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 ),
               ),
             ),
-          // Stays while paused or behind live, after the banner has gone.
-          if (state.phase == PlayerPhase.playing && (widget.tuner.paused.value || _behind > 0))
-            Positioned(top: 40, left: 56, child: _timeshiftBadge()),
+          // Stays while paused, after the banner has gone.
+          if (state.phase == PlayerPhase.playing && widget.tuner.paused.value)
+            Positioned(top: 40, left: 56, child: _pausedBadge()),
           if (_digits.isNotEmpty)
             Positioned(
               top: 40,
@@ -288,25 +309,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
-  Widget _timeshiftBadge() {
-    final paused = widget.tuner.paused.value;
-    final behind = Duration(seconds: _behind.round());
-    final text = [
-      if (paused) 'Paused',
-      if (behind.inSeconds > 0) '${behind.inMinutes}:${(behind.inSeconds % 60).toString().padLeft(2, '0')} behind live',
-    ].join('  ·  ');
+  Widget _pausedBadge() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       decoration: BoxDecoration(color: Tv.panel, borderRadius: BorderRadius.circular(12)),
-      child: Row(
+      child: const Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(paused ? Icons.pause : Icons.history, size: 32),
-          const SizedBox(width: 12),
-          Text(text, style: const TextStyle(fontSize: Tv.small)),
+          Icon(Icons.pause, size: 32),
+          SizedBox(width: 12),
+          Text('Paused', style: TextStyle(fontSize: Tv.small)),
         ],
       ),
     );
+  }
+
+  /// "Live", or how far behind after a pause or rewind.
+  String get _liveText {
+    if (!_timeshifted || _behind < 1) return 'Live';
+    final behind = Duration(seconds: _behind.round());
+    return '${behind.inMinutes}:${(behind.inSeconds % 60).toString().padLeft(2, '0')} behind live';
   }
 
   Widget _status(TunerState state, ChannelEntry channel) {
@@ -397,11 +419,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                if (state.stream?.quality != null && state.phase == PlayerPhase.playing)
+                if (state.phase == PlayerPhase.playing)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
-                      state.stream!.quality!,
+                      [_liveText, ?state.stream?.quality].join('  ·  '),
                       style: const TextStyle(fontSize: Tv.small, color: Colors.white38),
                     ),
                   ),
