@@ -227,10 +227,15 @@ class IptvDatabase {
     });
   }
 
-  /// Streams to check, oldest check first.
-  List<StreamRow> streamsToCheck() => [
+  /// Streams not checked since [since] (all of them when null), never-checked
+  /// first, then oldest check first. Each result is saved as it comes in, so
+  /// a stopped run picks up where it left off.
+  List<StreamRow> streamsToCheck({DateTime? since}) => [
     for (final row in db.select(
-      'SELECT id, channel_id, url, user_agent, referrer FROM streams ORDER BY checked_at IS NOT NULL, checked_at, rank',
+      'SELECT id, channel_id, url, user_agent, referrer FROM streams '
+      'WHERE checked_at IS NULL OR checked_at < ? '
+      'ORDER BY checked_at IS NOT NULL, checked_at, rank',
+      [since == null ? 1 << 62 : since.millisecondsSinceEpoch ~/ 1000],
     ))
       StreamRow(row['id'] as int, row['channel_id'] as String, row['url'] as String, {
         if (row['user_agent'] != null) 'User-Agent': row['user_agent'] as String,

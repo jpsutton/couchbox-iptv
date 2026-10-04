@@ -16,6 +16,7 @@ Future<void> main(List<String> args) async {
     ..addFlag('check', defaultsTo: true, help: 'Check every stream')
     ..addFlag('guide', defaultsTo: true, help: 'Fetch the guide')
     ..addFlag('logos', defaultsTo: true, help: 'Download missing logos')
+    ..addOption('recheck-after', defaultsTo: '12', help: 'Skip streams checked within this many hours (0: check all)')
     ..addFlag('help', abbr: 'h', negatable: false);
   final ArgResults opts;
   try {
@@ -47,6 +48,7 @@ Future<void> main(List<String> args) async {
         check: opts.flag('check'),
         guide: opts.flag('guide'),
         logos: opts.flag('logos'),
+        recheckAfter: Duration(hours: int.tryParse(opts.option('recheck-after')!) ?? 12),
       ),
     );
     exitCode = ok ? 0 : 1;

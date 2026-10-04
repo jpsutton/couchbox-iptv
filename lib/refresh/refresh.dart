@@ -18,12 +18,22 @@ const apiBase = 'https://iptv-org.github.io/api';
 
 /// What a run does; all on by default.
 class RefreshOptions {
-  const RefreshOptions({this.catalog = true, this.check = true, this.guide = true, this.logos = true});
+  const RefreshOptions({
+    this.catalog = true,
+    this.check = true,
+    this.guide = true,
+    this.logos = true,
+    this.recheckAfter = const Duration(hours: 12),
+  });
 
   final bool catalog;
   final bool check;
   final bool guide;
   final bool logos;
+
+  /// Streams checked more recently than this are skipped, so a stopped run
+  /// resumes instead of starting over.
+  final Duration recheckAfter;
 }
 
 /// One refresh: catalog, stream checks, guide, logos. Each step logs and
@@ -57,7 +67,7 @@ class Refresh {
     }
 
     await step('catalog', options.catalog, _catalog);
-    await step('check', options.check, _checkStreams);
+    await step('check', options.check, () => _checkStreams(options.recheckAfter));
     await step('guide', options.guide, _guide);
     await step('logos', options.logos, _logos);
     client.close(force: true);
@@ -90,9 +100,9 @@ class Refresh {
     log('catalog: ${selected.length} channels, ${selected.fold<int>(0, (n, c) => n + c.streams.length)} streams');
   }
 
-  Future<void> _checkStreams() async {
+  Future<void> _checkStreams(Duration recheckAfter) async {
     final checker = StreamChecker(client);
-    final streams = db.streamsToCheck();
+    final streams = db.streamsToCheck(since: DateTime.now().subtract(recheckAfter));
     var working = 0;
     await throttle.forEach(streams, (stream) async {
       final health = await checker.check(stream.url, stream.headers);

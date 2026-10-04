@@ -247,9 +247,11 @@ void main() {
       db.replaceChannels(chans(['A.us']));
       expect(db.db.select('SELECT status, response_ms FROM streams').single, {'status': 'working', 'response_ms': 120});
       expect(db.counts(), {'channels': 1, 'programmes': 0, 'streams_working': 1});
-      // Unchecked streams come first.
+      // Unchecked streams come first; recent checks are skipped on resume.
       db.replaceChannels(chans(['A.us', 'C.us']));
       expect(db.streamsToCheck().first.channelId, 'C.us');
+      expect([for (final s in db.streamsToCheck(since: DateTime(2026, 10, 3))) s.channelId], ['C.us']);
+      expect([for (final s in db.streamsToCheck(since: DateTime(2026, 10, 5))) s.channelId], ['C.us', 'A.us']);
     });
   });
 }
