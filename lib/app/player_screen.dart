@@ -272,6 +272,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         children: [
           // Transparent: the native video plane shows through.
           Positioned.fill(child: widget.tuner.player.view()),
+          // Keeps every frame non-empty. With the overlays gone the screen
+          // drew nothing, and the last frame with them stayed up (see also
+          // clear_window_cb in linux/runner/my_application.cc).
+          const Positioned(left: 0, top: 0, width: 1, height: 1, child: ColoredBox(color: Color(0x01000000))),
           if (state.phase != PlayerPhase.playing) const Positioned.fill(child: ColoredBox(color: Colors.black)),
           if (state.phase == PlayerPhase.opening || state.phase == PlayerPhase.failed)
             Center(child: _status(state, channel)),

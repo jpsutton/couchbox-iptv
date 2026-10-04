@@ -9,11 +9,12 @@
 #include "flutter/generated_plugin_registrant.h"
 #include "mpv/mpv_plugin.h"
 
-// Clears the window to transparent before each frame. Flutter's GTK
-// compositor blends its frame over what is already there
-// (gdk_cairo_draw_from_gl), and an app-paintable window is never cleared by
-// GTK, so where a frame turns transparent (a faded overlay) the old pixels
-// would stay on screen. Runs before the window's children draw.
+// Clears to transparent before Flutter draws each frame. Flutter's GTK
+// compositor blends its frame over what is already in the buffer
+// (gdk_cairo_draw_from_gl), and nothing clears a transparent window's buffer,
+// so where a frame turns transparent (a hidden overlay over the video) the old
+// pixels would stay on screen. Connected to Flutter's renderer widget (a
+// GtkDrawingArea with its own GdkWindow) so it runs right before its draw.
 static gboolean clear_window_cb(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
   (void)widget;
   (void)user_data;
@@ -22,6 +23,16 @@ static gboolean clear_window_cb(GtkWidget* widget, cairo_t* cr, gpointer user_da
   cairo_paint(cr);
   cairo_restore(cr);
   return FALSE;
+}
+
+// Connects clear_window_cb to Flutter's renderer: the GtkDrawingArea inside
+// the FlView.
+static void connect_clear_to_renderer(GtkWidget* widget, gpointer user_data) {
+  if (GTK_IS_DRAWING_AREA(widget)) {
+    g_signal_connect(widget, "draw", G_CALLBACK(clear_window_cb), nullptr);
+  } else if (GTK_IS_CONTAINER(widget)) {
+    gtk_container_forall(GTK_CONTAINER(widget), connect_clear_to_renderer, user_data);
+  }
 }
 
 // The native mpv video plane is a wl_subsurface stacked below this window's
@@ -41,7 +52,7 @@ static void enable_video_plane_transparency(GtkWindow* window, FlView* view) {
 
   gtk_widget_set_visual(GTK_WIDGET(window), visual);
   gtk_widget_set_app_paintable(GTK_WIDGET(window), TRUE);
-  g_signal_connect(window, "draw", G_CALLBACK(clear_window_cb), nullptr);
+  connect_clear_to_renderer(GTK_WIDGET(view), nullptr);
 
   GdkRGBA transparent = {0.0, 0.0, 0.0, 0.0};
   fl_view_set_background_color(view, &transparent);

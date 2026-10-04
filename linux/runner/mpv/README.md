@@ -20,7 +20,8 @@ Local changes, kept small so updates from Plezy apply cleanly:
 
 To update: copy the same files from a newer Plezy tag and reapply the rename.
 
-Not from Plezy: `my_application.cc` clears the transparent window before each
-frame (`clear_window_cb`). Without it, overlays that fade out over the video
-leave a faint copy behind, because Flutter's GTK compositor draws each frame
-over the previous one. Plezy 2.22.0 has the same gap.
+Not from Plezy: `my_application.cc` clears Flutter's renderer to
+transparent before each frame (`clear_window_cb`), and the player screen keeps
+one invisible pixel painted. Without them, an overlay hidden over the video
+stayed on screen (fully, or faintly after a fade). Plezy 2.22.0 has neither;
+whether its overlays show the same problem is untested.
