@@ -55,10 +55,15 @@ class FixedPlaybackMonitor implements PlaybackMonitor {
   void close() {}
 }
 
-/// Runs network jobs a few at a time, and fewer, spaced out, while something
-/// plays, so the job never competes with the stream on screen.
+/// Runs network jobs several at a time, and fewer, spaced out, while
+/// something plays, so the job never competes with the stream on screen.
 class Throttle {
-  Throttle(this.monitor, {this.normal = 6, this.whilePlaying = 1, this.gapWhilePlaying = const Duration(seconds: 1)});
+  Throttle(
+    this.monitor, {
+    this.normal = 12,
+    this.whilePlaying = 4,
+    this.gapWhilePlaying = const Duration(milliseconds: 250),
+  });
 
   final PlaybackMonitor monitor;
   final int normal;
