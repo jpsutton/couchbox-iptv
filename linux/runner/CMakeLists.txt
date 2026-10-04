@@ -1,0 +1,56 @@
+cmake_minimum_required(VERSION 3.13)
+project(runner LANGUAGES CXX)
+
+# Define the application target. To change its name, change BINARY_NAME in the
+# top-level CMakeLists.txt, not the value here, or `flutter run` will no longer
+# work.
+add_executable(${BINARY_NAME}
+  "main.cc"
+  "my_application.cc"
+  "mpv/mpv_player.cc"
+  "mpv/mpv_plugin.cc"
+  "mpv/plane_render_executor.cc"
+  "mpv/wayland_video_surface.cc"
+  "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
+)
+
+apply_standard_settings(${BINARY_NAME})
+
+# mpv_plugin.cc uses std::optional.
+target_compile_features(${BINARY_NAME} PRIVATE cxx_std_17)
+
+add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
+
+# Wayland client and EGL back the native video plane (a wl_subsurface below the
+# Flutter surface); see mpv/README.md.
+pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
+pkg_check_modules(WAYLAND_EGL REQUIRED IMPORTED_TARGET wayland-egl)
+pkg_check_modules(EGL REQUIRED IMPORTED_TARGET egl)
+pkg_check_modules(MPV REQUIRED IMPORTED_TARGET mpv)
+pkg_check_modules(EPOXY REQUIRED IMPORTED_TARGET epoxy)
+
+# Vendored wayland-scanner output for color-management-v1 (HDR on the plane).
+# C and generated, so built apart and not held to -Wall -Werror.
+enable_language(C)
+add_library(wayland_protocols STATIC "wayland/color-management-v1-protocol.c")
+target_include_directories(wayland_protocols PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/wayland")
+target_link_libraries(wayland_protocols PUBLIC PkgConfig::WAYLAND_CLIENT)
+target_compile_options(wayland_protocols PRIVATE -w)
+
+add_library(simdutf STATIC "${simdutf_SOURCE_DIR}/simdutf.cpp")
+target_include_directories(simdutf PUBLIC "${simdutf_SOURCE_DIR}")
+target_compile_features(simdutf PUBLIC cxx_std_14)
+target_compile_options(simdutf PRIVATE -w)
+
+target_link_libraries(${BINARY_NAME} PRIVATE flutter)
+target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
+target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::MPV)
+target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::EPOXY)
+target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::WAYLAND_CLIENT)
+target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::WAYLAND_EGL)
+target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::EGL)
+target_link_libraries(${BINARY_NAME} PRIVATE wayland_protocols)
+target_link_libraries(${BINARY_NAME} PRIVATE simdutf)
+
+target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
+target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/../shared/cpp")

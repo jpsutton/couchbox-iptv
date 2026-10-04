@@ -1,0 +1,26 @@
+name: couchbox_iptv
+description: "Free internet TV with a channel guide, for couchbox"
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.13.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Second player backend for the M0 comparison (mpv rendered into a Flutter
+  # texture); the first is the vendored native plane in linux/runner/mpv.
+  media_kit: ^1.2.6
+  media_kit_video: ^2.0.1
+  media_kit_libs_video: ^1.0.7
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/m0_streams.json
