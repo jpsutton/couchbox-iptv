@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   args: ^2.7.0
+  dbus: ^0.8.0
   path: ^1.9.1
   sqlite3: ^3.7.0
   xml: ^7.1.0

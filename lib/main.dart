@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'app/guide_screen.dart';
 import 'app/repository.dart';
+import 'app/screen_inhibitor.dart';
 import 'app/tuner.dart';
 import 'data/database.dart';
 import 'paths.dart';
@@ -17,6 +18,7 @@ Future<void> main() async {
   final settings = Settings.load();
   final tuner = Tuner(NativeMpvPlayer(), repository);
   await tuner.configure(settings);
+  ScreenInhibitor(tuner);
   runApp(IptvApp(repository: repository, tuner: tuner, settings: settings));
 }
 
