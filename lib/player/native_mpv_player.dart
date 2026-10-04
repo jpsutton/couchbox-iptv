@@ -69,6 +69,8 @@ class NativeMpvPlayer implements LivePlayer {
       'args': ['loadfile', url, 'replace'],
     });
     await _methods.invokeMethod('setVisible', {'visible': true});
+    // Wherever the picture goes now: a new stream starts there.
+    _VideoPlaneState.current?.sendRect(force: true);
   }
 
   @override
@@ -118,10 +120,14 @@ class NativeMpvPlayer implements LivePlayer {
   /// full-screen player share the one plane.
   static Rect? _lastRect;
 
-  static Future<void> setVideoRect(Rect physical, double devicePixelRatio) {
-    if (physical == _lastRect) return Future.value();
+  static Future<void> setVideoRect(Rect physical, double devicePixelRatio, {bool force = false}) async {
+    if (physical == _lastRect && !force) return;
     _lastRect = physical;
-    return _setVideoRect(physical, devicePixelRatio);
+    try {
+      await _setVideoRect(physical, devicePixelRatio);
+    } on PlatformException {
+      _lastRect = null; // not taken (no plane yet): send again next time
+    }
   }
 
   static Future<void> _setVideoRect(Rect physical, double devicePixelRatio) => _methods.invokeMethod('setVideoRect', {
@@ -134,7 +140,9 @@ class NativeMpvPlayer implements LivePlayer {
 }
 
 /// A transparent box whose screen position, in physical pixels, is sent to
-/// the plugin after every layout that moves it (as Plezy's Video widget does).
+/// the plugin: after every layout (as Plezy's Video widget does), when its
+/// screen comes back on stage (the guide's preview box after the full-screen
+/// player), and when a new stream opens. Only one view is on stage at a time.
 class _VideoPlane extends StatefulWidget {
   const _VideoPlane();
 
@@ -143,21 +151,45 @@ class _VideoPlane extends StatefulWidget {
 }
 
 class _VideoPlaneState extends State<_VideoPlane> {
-  void _sendRect() {
-    if (!mounted) return;
+  /// The view on stage, which the picture follows.
+  static _VideoPlaneState? current;
+
+  bool _onStage = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // TickerMode is off while a route covers this one: that is how a screen
+    // knows it is back on stage.
+    final onStage = TickerMode.valuesOf(context).enabled;
+    if (onStage && !_onStage) {
+      current = this;
+      WidgetsBinding.instance.addPostFrameCallback((_) => sendRect(force: true));
+    }
+    _onStage = onStage;
+  }
+
+  @override
+  void dispose() {
+    if (current == this) current = null;
+    super.dispose();
+  }
+
+  void sendRect({bool force = false}) {
+    if (!mounted || !_onStage) return;
     final box = context.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return;
+    if (box == null || !box.hasSize || !box.attached) return;
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final rect = (box.localToGlobal(Offset.zero) & box.size);
     final physical = Rect.fromLTRB(rect.left * dpr, rect.top * dpr, rect.right * dpr, rect.bottom * dpr);
-    NativeMpvPlayer.setVideoRect(physical, dpr);
+    NativeMpvPlayer.setVideoRect(physical, dpr, force: force);
   }
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => _sendRect());
+        WidgetsBinding.instance.addPostFrameCallback((_) => sendRect());
         return const SizedBox.expand();
       },
     );
