@@ -16,7 +16,8 @@ import 'widgets.dart';
 /// The home screen: a grid of channels by half hours, the focused programme's
 /// details on top and the chosen channel (the last one watched) playing in a
 /// preview box beside them; moving the focus doesn't change it. OK or Play goes full screen, Menu has options, digits jump to a
-/// channel, Channel Up/Down (or Next/Previous) page through the channels.
+/// channel, Channel Up/Down (or Next/Previous) page through the channels,
+/// and a Home tap jumps to the category bar (and back).
 class GuideScreen extends StatefulWidget {
   const GuideScreen({super.key, required this.repository, required this.tuner, required this.settings});
 
@@ -273,15 +274,19 @@ class _GuideScreenState extends State<GuideScreen> {
           _selectFilter(_filter - 1);
         case RemoteKey.right:
           _selectFilter(_filter + 1);
-        case RemoteKey.down || RemoteKey.ok:
+        case RemoteKey.down || RemoteKey.ok || RemoteKey.home:
           setState(() => _inFilterBar = false);
-          _moveRow(0);
+          // Back to the channel left by Home, or the top of a new category.
+          _moveRow(_row);
         default:
           return KeyEventResult.ignored;
       }
       return KeyEventResult.handled;
     }
     switch (key) {
+      case RemoteKey.home:
+        // Straight to the category bar from anywhere in the grid.
+        setState(() => _inFilterBar = true);
       case RemoteKey.up:
         if (_row == 0) {
           setState(() => _inFilterBar = true);

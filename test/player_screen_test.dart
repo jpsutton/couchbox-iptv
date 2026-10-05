@@ -196,4 +196,37 @@ void main() {
     expect(tuner.state.value.channel?.id, 'A.us');
     expect(tuner.state.value.phase, PlayerPhase.playing);
   });
+
+  testWidgets('a Home tap returns to the guide, still playing', (tester) async {
+    await tester.runAsync(() => tuner.tune(channels.first));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => Material(
+                  child: PlayerScreen(
+                    repository: repository,
+                    tuner: tuner,
+                    channels: channels,
+                    allChannels: channels,
+                    start: 0,
+                  ),
+                ),
+              ),
+            ),
+            child: const Text('guide'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('guide'));
+    await tester.pumpAndSettle();
+    expect(find.byType(PlayerScreen), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.browserHome, platform: 'web');
+    await tester.pumpAndSettle();
+    expect(find.byType(PlayerScreen), findsNothing);
+    expect(tuner.state.value.channel?.id, 'A.us');
+  });
 }

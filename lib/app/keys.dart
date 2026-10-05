@@ -15,6 +15,7 @@ enum RemoteKey {
   info,
   channelUp,
   channelDown,
+  home,
   stop,
   playPause,
   play,
@@ -65,6 +66,8 @@ RemoteKey remoteKey(KeyEvent event) {
     return RemoteKey.back;
   }
   if (key == LogicalKeyboardKey.contextMenu || key == LogicalKeyboardKey.keyM) return RemoteKey.menu;
+  // A short Home tap (a long press is couchbox's go-home, never seen here).
+  if (key == LogicalKeyboardKey.browserHome || key == LogicalKeyboardKey.goHome) return RemoteKey.home;
   if (key == LogicalKeyboardKey.info ||
       physical == PhysicalKeyboardKey.info ||
       _isEvdev(key, _keyInfo) ||

@@ -272,6 +272,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         } else {
           _showBanner();
         }
+      case RemoteKey.home:
+        // A Home tap: back to the guide, the channel playing on in its preview.
+        _leave();
       case RemoteKey.back:
         if (_browse != null) {
           _endBrowse();
