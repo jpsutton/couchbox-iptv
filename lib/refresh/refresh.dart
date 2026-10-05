@@ -95,7 +95,13 @@ class Refresh {
       logos: (await _api('logos')).map(ApiLogo.fromJson).toList(),
       blocklist: (await _api('blocklist')).map(ApiBlock.fromJson).toList(),
     );
-    final selected = select(catalog, settings);
+    final pluto = <String, PlutoListing>{};
+    for (final MapEntry(key: country, value: file) in (await _plutoGuides()).entries) {
+      for (final MapEntry(key: id, value: c) in (await parseXmltvChannels(readGzippedXml(file))).entries) {
+        pluto[id] = PlutoListing(name: c.name, logo: c.icon, country: country);
+      }
+    }
+    final selected = select(catalog, settings, pluto: pluto);
     db.replaceChannels(selected);
     log('catalog: ${selected.length} channels, ${selected.fold<int>(0, (n, c) => n + c.streams.length)} streams');
   }
@@ -112,19 +118,28 @@ class Refresh {
     log('check: $working of ${streams.length} streams working');
   }
 
+  /// i.mjh.nz's Pluto guide for each selected country (US when none), by
+  /// country code ("US"); ETag-cached, so a second call costs one request.
+  Future<Map<String, File>> _plutoGuides() async {
+    final files = <String, File>{};
+    for (final country in settings.countries.isEmpty ? const ['US'] : settings.countries) {
+      final file = File('${Paths.cache}/guides/pluto-${country.toLowerCase()}.xml.gz');
+      try {
+        await throttle.run(() => downloadCached(client, plutoGuideUrl(country), file));
+        files[country.toUpperCase()] = file;
+      } on HttpException catch (e) {
+        log('guide: no Pluto guide for $country ($e)');
+      }
+    }
+    return files;
+  }
+
   Future<void> _guide() async {
     final now = DateTime.now().toUtc();
     final wanted = db.guideIds('pluto');
     if (wanted.isEmpty) return;
     final programmes = <Programme>[];
-    for (final country in settings.countries.isEmpty ? const ['us'] : settings.countries) {
-      final file = File('${Paths.cache}/guides/pluto-${country.toLowerCase()}.xml.gz');
-      try {
-        await throttle.run(() => downloadCached(client, plutoGuideUrl(country), file));
-      } on HttpException catch (e) {
-        log('guide: no Pluto guide for $country ($e)');
-        continue;
-      }
+    for (final file in (await _plutoGuides()).values) {
       programmes.addAll(
         await parseXmltv(
           readGzippedXml(file),

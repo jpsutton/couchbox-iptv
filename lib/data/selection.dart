@@ -16,13 +16,28 @@ class SelectedChannel {
   /// `jmp2.uk/plu-<id>` links; the key into i.mjh.nz's Pluto guide.
   String? get plutoId {
     for (final s in streams) {
-      final m = _plutoUrl.firstMatch(s.url);
-      if (m != null) return m.group(1);
+      final id = plutoIdOf(s.url);
+      if (id != null) return id;
     }
     return null;
   }
+}
 
-  static final _plutoUrl = RegExp(r'^https?://jmp2\.uk/plu-([0-9a-f]{24})\b');
+final _plutoUrl = RegExp(r'^https?://jmp2\.uk/plu-([0-9a-f]{24})\b');
+
+/// The Pluto TV channel id in a `jmp2.uk/plu-<id>` link, else null.
+String? plutoIdOf(String url) => _plutoUrl.firstMatch(url)?.group(1);
+
+/// A channel in a Pluto TV guide (i.mjh.nz), for streams iptv-org lists
+/// without a channel record.
+class PlutoListing {
+  const PlutoListing({required this.name, this.logo, required this.country});
+
+  final String name;
+  final String? logo;
+
+  /// The guide it came from ("US").
+  final String country;
 }
 
 /// The iptv-org data, as downloaded.
@@ -45,7 +60,14 @@ class Catalog {
 /// The channels [settings] asks for. NSFW, blocklisted and closed channels,
 /// and channels with no stream, are always left out. A channel whose language
 /// iptv-org doesn't record passes the language filter.
-List<SelectedChannel> select(Catalog catalog, Settings settings) {
+///
+/// iptv-org also lists streams with no channel record (about a tenth of
+/// them, many Pluto TV). A Pluto one whose channel is in [pluto] (the guide
+/// for the selected countries) becomes a channel of its own, `pluto.<id>`,
+/// named as in the guide; channel-less streams with the same title are added
+/// to it as further streams. Other channel-less streams are left out: with
+/// no country or language they would slip past the filters.
+List<SelectedChannel> select(Catalog catalog, Settings settings, {Map<String, PlutoListing> pluto = const {}}) {
   final blocked = {for (final b in catalog.blocklist) b.channel};
   final feeds = <String, Map<String, ApiFeed>>{};
   for (final f in catalog.feeds) {
@@ -82,8 +104,48 @@ List<SelectedChannel> select(Catalog catalog, Settings settings) {
 
     selected.add(SelectedChannel(c, langs.toList()..sort(), rankStreams(channelStreams), bestLogo(logos[c.id])));
   }
+  if (categories.isEmpty) selected.addAll(_plutoOnly(catalog, pluto, countries));
   selected.sort((a, b) => a.channel.name.toLowerCase().compareTo(b.channel.name.toLowerCase()));
   return selected;
+}
+
+/// Channels for channel-less Pluto streams; see [select]. Never matched by a
+/// category filter (iptv-org gives them no categories).
+List<SelectedChannel> _plutoOnly(Catalog catalog, Map<String, PlutoListing> pluto, Set<String> countries) {
+  // Pluto channels some iptv-org channel already carries.
+  final known = <String>{
+    for (final s in catalog.streams)
+      if (s.channel != null) ?plutoIdOf(s.url),
+  };
+  final loose = [
+    for (final s in catalog.streams)
+      if (s.channel == null) s,
+  ];
+  final byTitle = <String, List<ApiStream>>{};
+  for (final s in loose) {
+    final title = s.title?.trim().toLowerCase();
+    if (title != null && title.isNotEmpty) (byTitle[title] ??= []).add(s);
+  }
+  final out = <SelectedChannel>[];
+  final done = <String>{};
+  for (final s in loose) {
+    final id = plutoIdOf(s.url);
+    final listing = id == null ? null : pluto[id];
+    if (listing == null || known.contains(id) || !done.add(id!)) continue;
+    if (countries.isNotEmpty && !countries.contains(listing.country)) continue;
+    final channelId = 'pluto.$id';
+    // The Pluto stream, then others with the same title (Roku, Tubi, ...).
+    final others = (byTitle[listing.name.trim().toLowerCase()] ?? const <ApiStream>[]).where(
+      (o) => o.url != s.url && plutoIdOf(o.url) == null,
+    );
+    out.add(
+      SelectedChannel(ApiChannel.synthetic(id: channelId, name: listing.name, country: listing.country), const [], [
+        s,
+        ...rankStreams(others.toList()),
+      ], listing.logo == null ? null : ApiLogo.synthetic(channelId, listing.logo!)),
+    );
+  }
+  return out;
 }
 
 /// Best first: streams that are neither geo-blocked nor part-time, then by

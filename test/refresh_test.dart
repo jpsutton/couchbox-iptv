@@ -93,6 +93,63 @@ void main() {
       ]);
     });
 
+    test('channel-less Pluto streams in the guide become channels, with same-title streams', () {
+      final c = Catalog(
+        channels: [channel('Fox.us')],
+        feeds: const [],
+        streams: [
+          stream('Fox.us', 'https://jmp2.uk/plu-aaaaaaaaaaaaaaaaaaaaaaaa.m3u8'),
+          ApiStream.fromJson({
+            'channel': null,
+            'title': 'Supermarket Sweep',
+            'url': 'https://jmp2.uk/plu-bbbbbbbbbbbbbbbbbbbbbbbb.m3u8',
+          }),
+          ApiStream.fromJson({
+            'channel': null,
+            'title': 'supermarket sweep ',
+            'url': 'https://roku.example/sweep.m3u8',
+            'quality': '720p',
+          }),
+          // Already carried by Fox.us: no second channel.
+          ApiStream.fromJson({
+            'channel': null,
+            'title': 'Fox',
+            'url': 'https://jmp2.uk/plu-aaaaaaaaaaaaaaaaaaaaaaaa.m3u8',
+          }),
+          // Not in the guide, and not Pluto: left out.
+          ApiStream.fromJson({
+            'channel': null,
+            'title': 'Mystery',
+            'url': 'https://jmp2.uk/plu-cccccccccccccccccccccccc.m3u8',
+          }),
+          ApiStream.fromJson({'channel': null, 'title': 'Loose', 'url': 'https://example.com/loose.m3u8'}),
+        ],
+        logos: const [],
+        blocklist: const [],
+      );
+      const pluto = {
+        'aaaaaaaaaaaaaaaaaaaaaaaa': PlutoListing(name: 'Fox', country: 'US'),
+        'bbbbbbbbbbbbbbbbbbbbbbbb': PlutoListing(
+          name: 'Supermarket Sweep',
+          logo: 'https://example.com/s.png',
+          country: 'US',
+        ),
+      };
+      final selected = select(c, const Settings(), pluto: pluto);
+      expect([for (final x in selected) x.channel.id], ['Fox.us', 'pluto.bbbbbbbbbbbbbbbbbbbbbbbb']);
+      final sweep = selected.last;
+      expect(sweep.channel.name, 'Supermarket Sweep');
+      expect(sweep.plutoId, 'bbbbbbbbbbbbbbbbbbbbbbbb');
+      expect(
+        [for (final s in sweep.streams) s.url],
+        ['https://jmp2.uk/plu-bbbbbbbbbbbbbbbbbbbbbbbb.m3u8', 'https://roku.example/sweep.m3u8'],
+      );
+      expect(sweep.logo?.url, 'https://example.com/s.png');
+      // Another country's guide, or a category filter: not included.
+      expect(select(c, const Settings(countries: ['GB']), pluto: pluto), isEmpty);
+      expect(select(c, const Settings(categories: ['news']), pluto: pluto).map((x) => x.channel.id), ['Fox.us']);
+    });
+
     test('takes the Pluto id from a jmp2.uk link', () {
       final c = catalog(
         channels: [channel('Fox.us')],

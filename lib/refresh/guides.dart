@@ -68,6 +68,22 @@ DateTime? parseXmltvTime(String? value) {
   return m.group(7) == '+' ? local.subtract(offset) : local.add(offset);
 }
 
+/// The `<channel>` entries of an XMLTV document: id to display name and icon.
+Future<Map<String, ({String name, String? icon})>> parseXmltvChannels(Stream<String> xml) async {
+  final out = <String, ({String name, String? icon})>{};
+  final nodes = xml.toXmlEvents().normalizeEvents().selectSubtreeEvents((e) => e.name == 'channel').toXmlNodes();
+  await for (final batch in nodes) {
+    for (final node in batch) {
+      if (node is! XmlElement) continue;
+      final id = node.getAttribute('id');
+      final name = node.getElement('display-name')?.innerText.trim();
+      if (id == null || name == null || name.isEmpty) continue;
+      out[id] = (name: name, icon: node.getElement('icon')?.getAttribute('src'));
+    }
+  }
+  return out;
+}
+
 /// A gzipped XMLTV file as text.
 Stream<String> readGzippedXml(File file) => file.openRead().transform(gzip.decoder).transform(utf8.decoder);
 

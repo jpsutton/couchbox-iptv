@@ -14,6 +14,13 @@ class ApiChannel {
       closed = json['closed'] as String?,
       replacedBy = json['replaced_by'] as String?;
 
+  /// A channel iptv-org has no record for, made from a guide's listing.
+  ApiChannel.synthetic({required this.id, required this.name, this.country})
+    : categories = const [],
+      isNsfw = false,
+      closed = null,
+      replacedBy = null;
+
   final String id;
   final String name;
   final String? country;
@@ -67,6 +74,9 @@ class ApiStream {
 }
 
 class ApiLogo {
+  /// A logo from a guide's listing.
+  ApiLogo.synthetic(this.channel, this.url) : feed = null, inUse = true, width = 0, format = null;
+
   ApiLogo.fromJson(Map<String, dynamic> json)
     : channel = json['channel'] as String,
       feed = json['feed'] as String?,
