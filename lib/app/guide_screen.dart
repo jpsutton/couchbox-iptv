@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
@@ -66,6 +67,7 @@ class _GuideScreenState extends State<GuideScreen> {
     _focus = _now;
     _windowStart = floorToSlot(_now);
     _load();
+    if (_all.isEmpty) _firstRefresh();
     final last = widget.repository.lastChannel;
     final at = _visible.indexWhere((c) => c.id == last);
     if (at >= 0) _row = at;
@@ -109,7 +111,19 @@ class _GuideScreenState extends State<GuideScreen> {
     }
   }
 
+  /// A new install has no channels until the refresh job runs, and its timer
+  /// waits for the night: start it now (the tick reloads until they arrive).
+  void _firstRefresh() {
+    Process.run('systemctl', [
+      '--user',
+      'start',
+      '--no-block',
+      'couchbox-iptv-refresh.service',
+    ]).catchError((Object e) => ProcessResult(0, 1, '', '$e'));
+  }
+
   void _onTick() {
+    if (_all.isEmpty) setState(_load);
     setState(() {
       _now = DateTime.now();
       if (_focus.isBefore(_now)) _focus = _now;
@@ -432,7 +446,7 @@ class _GuideScreenState extends State<GuideScreen> {
         alignment: Alignment.centerLeft,
         child: Text(
           _all.isEmpty
-              ? 'No channels yet. The channel list is fetched in the background; try again in a few minutes.'
+              ? 'Fetching the channel list. This takes a few minutes the first time.'
               : _filter == 1
               ? 'No favourites yet: press Menu on a channel to add it.'
               : 'No channels here.',
