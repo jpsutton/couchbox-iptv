@@ -4,6 +4,7 @@ import 'app/guide_screen.dart';
 import 'app/repository.dart';
 import 'app/screen_inhibitor.dart';
 import 'app/tuner.dart';
+import 'app/window_events.dart';
 import 'data/database.dart';
 import 'paths.dart';
 import 'player/native_mpv_player.dart';
@@ -20,7 +21,10 @@ Future<void> main() async {
   await tuner.configure(settings);
   ScreenInhibitor(tuner);
   // Out of sight, out of the network: no stream while the app is hidden.
+  // Flutter's own hide/show (X11, some compositors), and on Wayland the KWin
+  // script telling us (WindowEvents).
   AppLifecycleListener(onHide: tuner.suspend, onShow: tuner.resume);
+  WindowEvents.register(WindowEvents(onHidden: tuner.suspend, onShown: tuner.resume));
   runApp(IptvApp(repository: repository, tuner: tuner, settings: settings));
 }
 
