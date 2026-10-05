@@ -55,7 +55,7 @@ class IptvDatabase {
 
   final Database db;
 
-  static const schemaVersion = 2;
+  static const schemaVersion = 3;
 
   factory IptvDatabase.open(String path) {
     File(path).parent.createSync(recursive: true);
@@ -94,6 +94,11 @@ class IptvDatabase {
       // result, which the next refresh overwrites.
       db.execute('ALTER TABLE streams ADD COLUMN play_failed_at INTEGER');
       db.execute('ALTER TABLE streams ADD COLUMN play_failure TEXT');
+    }
+    if (version < 3) {
+      // Streams the viewer said not to use ("Don't use this stream"). By URL
+      // and in a table of its own, so a refresh can't undo it.
+      db.execute('CREATE TABLE IF NOT EXISTS ignored_streams (url TEXT PRIMARY KEY, ignored_at INTEGER NOT NULL)');
     }
     db.execute('PRAGMA user_version = $schemaVersion');
   }

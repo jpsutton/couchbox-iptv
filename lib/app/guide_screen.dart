@@ -338,6 +338,11 @@ class _GuideScreenState extends State<GuideScreen> {
         widget.repository.setHidden(channel.id, true);
         setState(_load);
       }),
+      if (channel.hasIgnored)
+        MenuOption('Use ignored streams again', () {
+          widget.repository.unignoreStreams(channel.id);
+          setState(_load);
+        }),
     ]);
   }
 

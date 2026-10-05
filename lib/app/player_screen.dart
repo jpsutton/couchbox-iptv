@@ -305,6 +305,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _showBanner(hold: true);
           widget.tuner.nextStream();
         }),
+      if (state.stream != null && channel.streams.length > 1)
+        MenuOption("Don't use this stream (${state.attempt} of ${channel.streams.length})", () {
+          _showBanner(hold: true);
+          widget.tuner.ignoreCurrentStream();
+        }),
+      if (channel.hasIgnored)
+        MenuOption('Use ignored streams again', () => widget.repository.unignoreStreams(channel.id)),
       if (_timeshifted)
         MenuOption('Back to live', () {
           widget.tuner.setPaused(false);

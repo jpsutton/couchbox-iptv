@@ -75,6 +75,15 @@ class Tuner {
   }
 
   /// Gives up on the current stream and tries the channel's next one.
+  /// "Don't use this stream": remembers it and moves on to the next one,
+  /// without counting it as a failure.
+  Future<void> ignoreCurrentStream() async {
+    final current = state.value;
+    if (current.channel == null || current.stream == null) return;
+    repository.ignoreStream(current.stream!.url);
+    await tune(current.channel!, from: current.attempt);
+  }
+
   Future<void> nextStream() async {
     final current = state.value;
     if (current.channel == null) return;

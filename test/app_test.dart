@@ -37,6 +37,33 @@ void main() {
     expect([for (final x in ordered) x.id], [4, 5, 3, 2, 1]);
   });
 
+  test('ignored streams go after everything else, and survive a refresh', () {
+    final now = DateTime(2026, 10, 4);
+    final ordered = Repository.orderForPlay([
+      const PlayableStream(1, 'u1', {}, status: 'working', ignored: true),
+      PlayableStream(2, 'u2', const {}, status: 'working', playFailedAt: now),
+      const PlayableStream(3, 'u3', {}, status: 'dead'),
+    ], now);
+    expect([for (final x in ordered) x.id], [3, 2, 1]);
+
+    final db = IptvDatabase.memory();
+    db.db.execute("INSERT INTO channels (id, name, categories, languages) VALUES ('A.us', 'A', '[]', '[]')");
+    db.db.execute("INSERT INTO numbers (channel_id, number) VALUES ('A.us', 1)");
+    db.db.execute("INSERT INTO streams (id, channel_id, url, labels, rank) VALUES (1, 'A.us', 'u1', '[]', 0)");
+    db.db.execute("INSERT INTO streams (id, channel_id, url, labels, rank) VALUES (2, 'A.us', 'u2', '[]', 1)");
+    final repo = Repository(db);
+    repo.ignoreStream('u1');
+    // A refresh replacing the stream row keeps it ignored (by URL).
+    db.db.execute("DELETE FROM streams WHERE id = 1");
+    db.db.execute("INSERT INTO streams (id, channel_id, url, labels, rank) VALUES (9, 'A.us', 'u1', '[]', 0)");
+    final channel = repo.channels(onlyWorking: false).single;
+    expect([for (final s in channel.streams) s.url], ['u2', 'u1']);
+    expect(channel.hasIgnored, isTrue);
+    repo.unignoreStreams('A.us');
+    expect(repo.channels(onlyWorking: false).single.hasIgnored, isFalse);
+    db.close();
+  });
+
   test('nowAndNext and progress', () {
     Programme p(int h, String t) =>
         Programme(channelId: 'A', start: DateTime(2026, 10, 4, h), stop: DateTime(2026, 10, 4, h + 1), title: t);

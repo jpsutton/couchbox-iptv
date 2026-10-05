@@ -4,7 +4,15 @@ import '../data/database.dart';
 
 /// A stream the player can try, best first.
 class PlayableStream {
-  const PlayableStream(this.id, this.url, this.headers, {this.quality, required this.status, this.playFailedAt});
+  const PlayableStream(
+    this.id,
+    this.url,
+    this.headers, {
+    this.quality,
+    required this.status,
+    this.playFailedAt,
+    this.ignored = false,
+  });
 
   final int id;
   final String url;
@@ -14,6 +22,9 @@ class PlayableStream {
   /// From the last check: unchecked, working or dead.
   final String status;
   final DateTime? playFailedAt;
+
+  /// The viewer said not to use it: tried only after every other stream.
+  final bool ignored;
 }
 
 /// A channel as the app shows it.
@@ -41,6 +52,8 @@ class ChannelEntry {
 
   /// Has a stream the last check found working.
   bool get working => streams.any((s) => s.status == 'working');
+
+  bool get hasIgnored => streams.any((s) => s.ignored);
 }
 
 /// The app's view of iptv.db: channels, the guide, and the app-owned state
@@ -60,7 +73,9 @@ class Repository {
     final db = database.db;
     final streams = <String, List<PlayableStream>>{};
     for (final row in db.select(
-      'SELECT id, channel_id, url, user_agent, referrer, quality, status, play_failed_at FROM streams ORDER BY rank',
+      'SELECT s.id, s.channel_id, s.url, s.user_agent, s.referrer, s.quality, s.status, s.play_failed_at, '
+      'i.url IS NOT NULL AS ignored '
+      'FROM streams s LEFT JOIN ignored_streams i ON i.url = s.url ORDER BY s.rank',
     )) {
       final failedAt = row['play_failed_at'] as int?;
       (streams[row['channel_id'] as String] ??= []).add(
@@ -74,6 +89,7 @@ class Repository {
           quality: row['quality'] as String?,
           status: row['status'] as String,
           playFailedAt: failedAt == null ? null : DateTime.fromMillisecondsSinceEpoch(failedAt * 1000),
+          ignored: row['ignored'] == 1,
         ),
       );
     }
@@ -108,6 +124,7 @@ class Repository {
   /// Orders a channel's streams (already in rank order) for the player.
   static List<PlayableStream> orderForPlay(List<PlayableStream> streams, DateTime now) {
     int group(PlayableStream s) {
+      if (s.ignored) return 4;
       final failedLately = s.playFailedAt != null && now.difference(s.playFailedAt!) < playFailurePenalty;
       if (failedLately) return 3;
       return switch (s.status) {
@@ -161,6 +178,19 @@ class Repository {
   void recordPlayFailure(int streamId, String reason) => database.db.execute(
     'UPDATE streams SET play_failed_at = ?, play_failure = ? WHERE id = ?',
     [DateTime.now().millisecondsSinceEpoch ~/ 1000, reason, streamId],
+  );
+
+  /// "Don't use this stream": it goes to the very end of its channel's list,
+  /// for good.
+  void ignoreStream(String url) => database.db.execute(
+    'INSERT OR REPLACE INTO ignored_streams (url, ignored_at) VALUES (?, ?)',
+    [url, DateTime.now().millisecondsSinceEpoch ~/ 1000],
+  );
+
+  /// "Use ignored streams again" for [channelId].
+  void unignoreStreams(String channelId) => database.db.execute(
+    'DELETE FROM ignored_streams WHERE url IN (SELECT url FROM streams WHERE channel_id = ?)',
+    [channelId],
   );
 
   void recordPlaySuccess(int streamId) =>
