@@ -108,7 +108,7 @@ Channels without data show "No information".
 | M0 | Player comparison on the M715q | Done: native plane (`m0.md`) |
 | M1 | Background job and database | Done |
 | M2 | Player and channel list | Done (the list became the guide in M3) |
-| M3 | Guide | Built; on the M715q for testing |
+| M3 | Guide | Done, plus what testing on the M715q asked for: channel browsing in the banner, pause and skip within the buffer, a fixed preview channel, stopping when out of sight, ignored streams, channel-less Pluto streams |
 | M4 | Packaging, tile, timer, CI | |
 | M5 | Polish: other streams per channel, search, guide option B | |
 
