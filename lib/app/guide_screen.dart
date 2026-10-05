@@ -14,8 +14,8 @@ import 'tuner.dart';
 import 'widgets.dart';
 
 /// The home screen: a grid of channels by half hours, the focused programme's
-/// details on top and the focused channel playing in a preview box beside
-/// them. OK or Play goes full screen, Menu has options, digits jump to a
+/// details on top and the chosen channel (the last one watched) playing in a
+/// preview box beside them; moving the focus doesn't change it. OK or Play goes full screen, Menu has options, digits jump to a
 /// channel, Channel Up/Down (or Next/Previous) page through the channels.
 class GuideScreen extends StatefulWidget {
   const GuideScreen({super.key, required this.repository, required this.tuner, required this.settings});
@@ -154,14 +154,17 @@ class _GuideScreenState extends State<GuideScreen> {
     return visible.isEmpty ? null : visible[_row.clamp(0, visible.length - 1)];
   }
 
-  /// Plays the focused channel in the preview box once the focus rests on it.
+  /// At start, plays the last channel watched in the preview box. Only
+  /// choosing a channel (OK) changes it after that, not moving the focus:
+  /// tuning on every move was too slow to browse with.
   void _schedulePreview({bool immediately = false}) {
     _previewTimer?.cancel();
-    if (!widget.settings.preview) return;
-    final channel = _focused;
-    if (channel == null || widget.tuner.state.value.channel?.id == channel.id) return;
+    if (!widget.settings.preview || widget.tuner.state.value.channel != null) return;
+    final last = widget.repository.lastChannel;
+    final channel = _all.where((c) => c.id == last).firstOrNull;
+    if (channel == null) return;
     _previewTimer = Timer(immediately ? Duration.zero : const Duration(milliseconds: 1200), () {
-      if (mounted && _focused?.id == channel.id) widget.tuner.tune(channel);
+      if (mounted && widget.tuner.state.value.channel == null) widget.tuner.tune(channel);
     });
   }
 
@@ -198,7 +201,6 @@ class _GuideScreenState extends State<GuideScreen> {
     if (visible.isEmpty) return;
     setState(() => _row = to.clamp(0, visible.length - 1));
     _scrollToRow();
-    _schedulePreview();
   }
 
   /// Rows on screen: Channel Up/Down move a whole page.
