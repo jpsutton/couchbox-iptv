@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=IPTV
+Comment=Free internet TV with a channel guide
+Exec=couchbox-iptv
+Icon=org.couchbox.iptv
+Terminal=false
+StartupWMClass=org.couchbox.iptv
+Categories=AudioVideo;Video;TV;
