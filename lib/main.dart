@@ -19,6 +19,8 @@ Future<void> main() async {
   final tuner = Tuner(NativeMpvPlayer(), repository);
   await tuner.configure(settings);
   ScreenInhibitor(tuner);
+  // Out of sight, out of the network: no stream while the app is hidden.
+  AppLifecycleListener(onHide: tuner.suspend, onShow: tuner.resume);
   runApp(IptvApp(repository: repository, tuner: tuner, settings: settings));
 }
 

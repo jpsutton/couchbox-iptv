@@ -186,4 +186,14 @@ void main() {
       expect(find.text('Beta'), findsNothing);
     });
   });
+
+  test('suspend stops the stream; resume retunes the same channel', () async {
+    await tuner.tune(channels.first);
+    expect(tuner.state.value.channel?.id, 'A.us');
+    await tuner.suspend();
+    expect(tuner.state.value.channel, isNull);
+    await tuner.resume();
+    expect(tuner.state.value.channel?.id, 'A.us');
+    expect(tuner.state.value.phase, PlayerPhase.playing);
+  });
 }

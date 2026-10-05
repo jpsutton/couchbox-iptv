@@ -129,6 +129,23 @@ class Tuner {
     await player.command(['seek', by.toStringAsFixed(1), 'relative']);
   }
 
+  ChannelEntry? _suspended;
+
+  /// The app went out of sight (minimized, or the home screen over it):
+  /// stop the stream, to [resume] the same channel when it comes back.
+  Future<void> suspend() async {
+    final channel = state.value.channel;
+    if (channel == null) return;
+    _suspended = channel;
+    await stop();
+  }
+
+  Future<void> resume() async {
+    final channel = _suspended;
+    _suspended = null;
+    if (channel != null && state.value.channel == null) await tune(channel);
+  }
+
   Future<void> stop() async {
     _generation++;
     paused.value = false;

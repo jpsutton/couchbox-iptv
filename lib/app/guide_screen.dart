@@ -49,7 +49,7 @@ class _GuideScreenState extends State<GuideScreen> {
   late DateTime _focus;
   late DateTime _windowStart;
   DateTime _loadedUntil = DateTime(0);
-  final _rows = ScrollController();
+  late final ScrollController _rows;
   final _filterScroll = ScrollController();
   Timer? _tick;
   Timer? _previewTimer;
@@ -68,6 +68,8 @@ class _GuideScreenState extends State<GuideScreen> {
     final last = widget.repository.lastChannel;
     final at = _visible.indexWhere((c) => c.id == last);
     if (at >= 0) _row = at;
+    // Open with the chosen channel's row in view (a couple of rows down).
+    _rows = ScrollController(initialScrollOffset: ((_row - 2) * _rowHeight).clamp(0, double.infinity));
     widget.tuner.state.addListener(_onTuner);
     _tick = Timer.periodic(const Duration(seconds: 30), (_) => _onTick());
     // The first preview waits until the window is on screen: a video plane
