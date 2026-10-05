@@ -10,8 +10,10 @@ import 'repository.dart';
 import 'tuner.dart';
 import 'widgets.dart';
 
-/// Full-screen playback. Up/Down, Channel Up/Down or Next/Previous change
-/// channel, digits tune by number, OK shows what's on and Info toggles it,
+/// Full-screen playback. Up/Down, Channel Up/Down or Next/Previous browse
+/// the channels in the banner without tuning; OK tunes the one shown, and the
+/// banner timing out (or Back) leaves the channel as it was. Digits tune by
+/// number, OK shows what's on and Info toggles it,
 /// Menu has options. Play/Pause pauses live TV (the cache keeps filling);
 /// Left/Right skip 10 s back/on and Rewind/Fast Forward 10 s/30 s, within the
 /// cache and never past live. Back
@@ -52,6 +54,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Out of the tree once faded, so nothing of it is left on screen.
   bool _bannerGone = false;
   Timer? _bannerTimer;
+
+  /// The channel the banner shows while browsing with Channel Up/Down, an
+  /// index into [_channels]; null when it shows the playing channel.
+  int? _browse;
 
   /// Seconds behind live after a pause or rewind, shown in the banner. mpv
   /// always reads some seconds ahead of playback, so that normal lead
@@ -130,10 +136,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
     widget.tuner.tune(_channels[_index]);
   }
 
-  void _step(int by) {
+  /// Channel Up/Down: shows the next channel in the banner, from the one
+  /// already shown while browsing, else from the playing channel.
+  void _browseBy(int by) {
     if (_channels.isEmpty) return;
-    setState(() => _index = (_index + by) % _channels.length);
-    _tune();
+    final from = _browse ?? _index;
+    setState(() => _browse = (from + by) % _channels.length);
+    _showBanner();
+  }
+
+  /// OK while browsing: tune the channel shown.
+  void _tuneBrowsed() {
+    final target = _browse;
+    if (target == null) return;
+    setState(() {
+      _browse = null;
+      _index = target;
+    });
+    if (widget.tuner.state.value.channel?.id != _channels[target].id) _tune();
+  }
+
+  /// Stops browsing; the banner shows the playing channel again.
+  void _endBrowse() {
+    if (_browse != null) setState(() => _browse = null);
   }
 
   /// Shows the banner; it hides 5 s after the picture appears.
@@ -155,9 +180,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
-  /// Info: show the banner, or hide it if it is showing.
+  /// The banner hid: browsing ends with it.
+  void _bannerHidden() {
+    if (!mounted || _banner) return;
+    setState(() {
+      _bannerGone = true;
+      _browse = null;
+    });
+  }
+
+  /// Info: show the playing channel's banner, or hide it if that is showing.
   void _toggleBanner() {
-    if (_banner && widget.tuner.state.value.phase == PlayerPhase.playing) {
+    if (_browse != null) {
+      _endBrowse();
+      _showBanner();
+    } else if (_banner && widget.tuner.state.value.phase == PlayerPhase.playing) {
       _bannerTimer?.cancel();
       setState(() {
         _banner = false;
@@ -199,9 +236,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (!isPress(event)) return KeyEventResult.handled;
     switch (remoteKey(event)) {
       case RemoteKey.up || RemoteKey.channelUp || RemoteKey.next:
-        _step(1);
+        _browseBy(1);
       case RemoteKey.down || RemoteKey.channelDown || RemoteKey.previous:
-        _step(-1);
+        _browseBy(-1);
       case RemoteKey.playPause:
         if (!widget.tuner.paused.value) _timeshift();
         widget.tuner.setPaused(!widget.tuner.paused.value);
@@ -230,9 +267,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
         widget.tuner.seekBy(10);
         _showBanner();
       case RemoteKey.ok:
-        _showBanner();
+        if (_browse != null) {
+          _tuneBrowsed();
+        } else {
+          _showBanner();
+        }
       case RemoteKey.back:
-        _leave();
+        if (_browse != null) {
+          _endBrowse();
+          _showBanner();
+        } else {
+          _leave();
+        }
       case RemoteKey.stop:
         _leave(stop: true);
       case RemoteKey.menu:
@@ -272,7 +318,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Widget build(BuildContext context) {
     final state = widget.tuner.state.value;
     final channel = _channels[_index];
-    final (:now, :next) = nowAndNext(_guide[channel.id], DateTime.now());
+    final shown = _browse == null ? channel : _channels[_browse!];
+    final (:now, :next) = nowAndNext(_guide[shown.id], DateTime.now());
     return Focus(
       autofocus: true,
       onKeyEvent: _onKey,
@@ -296,10 +343,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 child: AnimatedOpacity(
                   opacity: _banner || state.phase != PlayerPhase.playing ? 1 : 0,
                   duration: _fade ? const Duration(milliseconds: 600) : Duration.zero,
-                  onEnd: () {
-                    if (mounted && !_banner) setState(() => _bannerGone = true);
-                  },
-                  child: _bannerPanel(channel, now, next, state),
+                  onEnd: _bannerHidden,
+                  child: _bannerPanel(shown, now, next, state, browsing: _browse != null),
                 ),
               ),
             ),
@@ -363,7 +408,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
-  Widget _bannerPanel(ChannelEntry channel, Programme? now, Programme? next, TunerState state) {
+  Widget _bannerPanel(
+    ChannelEntry channel,
+    Programme? now,
+    Programme? next,
+    TunerState state, {
+    bool browsing = false,
+  }) {
     final at = DateTime.now();
     return Container(
       padding: const EdgeInsets.all(24),
@@ -435,7 +486,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                if (state.phase == PlayerPhase.playing)
+                if (browsing)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Press OK to watch',
+                      style: TextStyle(fontSize: Tv.small, color: Tv.accent),
+                    ),
+                  )
+                else if (state.phase == PlayerPhase.playing)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(

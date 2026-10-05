@@ -110,4 +110,80 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(find.byType(AnimatedOpacity), findsNothing); // then leaves the tree
   });
+
+  group('browsing with Channel Up/Down', () {
+    late List<ChannelEntry> two;
+    setUp(() {
+      repository.database.db.execute(
+        "INSERT INTO channels (id, name, categories, languages) VALUES ('B.us', 'Beta', '[]', '[]')",
+      );
+      repository.database.db.execute(
+        "INSERT INTO streams (id, channel_id, url, labels, rank) VALUES (2, 'B.us', 'v', '[]', 0)",
+      );
+      two = [
+        channels.first,
+        ChannelEntry(
+          id: 'B.us',
+          number: 2,
+          name: 'Beta',
+          categories: const [],
+          logoPath: null,
+          favourite: false,
+          streams: const [PlayableStream(2, 'v', {}, status: 'working')],
+        ),
+      ];
+    });
+
+    Future<void> start(WidgetTester tester) async {
+      await tester.runAsync(() => tuner.tune(two.first));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Material(
+            child: PlayerScreen(repository: repository, tuner: tuner, channels: two, allChannels: two, start: 0),
+          ),
+        ),
+      );
+    }
+
+    testWidgets('shows the next channel without tuning; OK tunes it', (tester) async {
+      await start(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.pageUp); // Channel Up
+      await tester.pump();
+      expect(find.text('Beta'), findsOneWidget);
+      expect(find.text('Press OK to watch'), findsOneWidget);
+      expect(tuner.state.value.channel?.id, 'A.us');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump();
+      expect(tuner.state.value.channel?.id, 'B.us');
+      expect(find.text('Press OK to watch'), findsNothing);
+    });
+
+    testWidgets('the timeout leaves the channel alone; the next press starts from it', (tester) async {
+      await start(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.pageUp);
+      await tester.pump();
+      expect(find.text('Beta'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 6));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('Beta'), findsNothing);
+      expect(tuner.state.value.channel?.id, 'A.us');
+      // From the playing channel again: Channel Down from Alpha wraps to Beta.
+      await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+      await tester.pump();
+      expect(find.text('Beta'), findsOneWidget);
+    });
+
+    testWidgets('Info shows the playing channel', (tester) async {
+      await start(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.pageUp);
+      await tester.pump();
+      expect(find.text('Beta'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.info);
+      await tester.pump();
+      expect(find.text('Alpha'), findsOneWidget);
+      expect(find.text('Beta'), findsNothing);
+    });
+  });
 }
