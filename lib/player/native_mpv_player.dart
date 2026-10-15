@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import 'couchbox_video.dart';
 import 'live_player.dart';
 
 /// mpv drawing into a Wayland subsurface below the window (the plugin
@@ -30,7 +31,7 @@ class NativeMpvPlayer implements LivePlayer {
     _eventSub = _events.receiveBroadcastStream().listen(_onEvent);
     final ok = await _methods.invokeMethod<bool>('initialize', {'hardwareDecoding': true});
     if (ok != true) throw StateError('mpv plugin did not initialize');
-    for (final option in liveMpvOptions.entries) {
+    for (final option in {...liveMpvOptions, ...couchboxMpvOptions()}.entries) {
       await _setProperty(option.key, option.value);
     }
     _initialized = true;
